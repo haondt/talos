@@ -2,6 +2,6 @@
 {
     public interface IDockerClient
     {
-        Task<List<string>> GetContainersAsync();
+        Task<List<string>> GetContainersAsync(CancellationToken? cancellationToken = null);
     }
 }

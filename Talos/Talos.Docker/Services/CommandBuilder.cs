@@ -67,7 +67,7 @@ namespace Talos.Docker.Services
             };
         }
 
-        public async Task<string> ExecuteAndCaptureStdoutAsync()
+        public async Task<string> ExecuteAndCaptureStdoutAsync(CancellationToken? cancellationToken = null)
         {
             var sb = new StringBuilder();
             var inner = this with
@@ -76,11 +76,11 @@ namespace Talos.Docker.Services
                     .WithStandardOutputPipe(PipeTarget.ToStringBuilder(sb))
             };
 
-            await inner.ExecuteAsync();
+            await inner.ExecuteAsync(cancellationToken);
             return sb.ToString();
         }
 
-        public async Task<Models.CommandResult> ExecuteAsync()
+        public async Task<Models.CommandResult> ExecuteAsync(CancellationToken? cancellationToken = null)
         {
             var maskedCommand = Options.SensitiveDataToMask.As(q => MaskSensitiveData(Options.Command, q)).Or(Options.Command);
             var maskedArguments = Options.SensitiveDataToMask.As(q => MaskSensitiveData(Command.Arguments, q)).Or(Command.Arguments);
@@ -89,7 +89,7 @@ namespace Talos.Docker.Services
                 maskedCommand, maskedArguments);
             try
             {
-                var result = await InternalExecuteAsync();
+                var result = await InternalExecuteAsync(cancellationToken);
                 Logger.LogInformation("Completed command: {command} {arguments} in {result}",
                     maskedCommand, maskedArguments, result.Duration);
 
@@ -125,7 +125,7 @@ namespace Talos.Docker.Services
             }
         }
 
-        private async Task<Models.CommandResult> InternalExecuteAsync()
+        private async Task<Models.CommandResult> InternalExecuteAsync(CancellationToken? cancellationToken = null)
         {
             var stopwatch = Stopwatch.StartNew();
 
@@ -141,19 +141,16 @@ namespace Talos.Docker.Services
             else if (Options.GracePeriod.Value != Timeout.InfiniteTimeSpan && Options.GracePeriod.Value > TimeSpan.Zero)
                 graceTimeout = Options.GracePeriod.Value;
 
-            var cts = new Optional<(CancellationTokenSource InterruptCts, CancellationTokenSource KillCts)>();
+            var timeoutCts = new Optional<CancellationTokenSource>();
+            var interruptCts = new Optional<CancellationTokenSource>();
+            var killCts = new Optional<CancellationTokenSource>();
             if (timeout.HasValue)
             {
-                var interruptCts = new CancellationTokenSource(timeout.Value);
-                CancellationTokenSource killCts;
-                if (graceTimeout.HasValue)
-                    killCts = new CancellationTokenSource(timeout.Value + graceTimeout.Value);
+                timeoutCts = new CancellationTokenSource(timeout.Value);
+                if (cancellationToken.HasValue)
+                    interruptCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Value.Token, cancellationToken.Value);
                 else
-                {
-                    killCts = new CancellationTokenSource(Timeout.Infinite);
-                }
-
-                cts = (interruptCts, killCts);
+                    interruptCts = timeoutCts;
             }
 
             var result = new Optional<CliWrap.CommandResult>();
@@ -162,16 +159,25 @@ namespace Talos.Docker.Services
             var command = Command.WithStandardErrorPipe(PipeTarget.ToStringBuilder(stdErrSb));
             try
             {
-                result = cts.HasValue
-                   ? await command.ExecuteAsync(cts.Value.KillCts.Token, cts.Value.InterruptCts.Token)
-                   : await command.ExecuteAsync();
+                if (interruptCts.HasValue)
+                {
+                    killCts = new CancellationTokenSource();
+                    if (graceTimeout.HasValue)
+                        interruptCts.Value.Token.Register(() => killCts.Value.CancelAfter(graceTimeout.Value));
+                    result = await command.ExecuteAsync(killCts.Value.Token, interruptCts.Value.Token);
+                }
+                else
+                {
+                    result = await command.ExecuteAsync();
+                }
             }
             catch (OperationCanceledException ex)
             {
-                var wasTimedOut = cts.As(q => q.InterruptCts.IsCancellationRequested)
+                var wasTimedOut = timeoutCts.As(q => q.IsCancellationRequested)
                     .Or(false);
-                var wasKilled = cts.As(q => q.KillCts.IsCancellationRequested)
+                var wasKilled = killCts.As(q => q.IsCancellationRequested)
                     .Or(false);
+                var wasCancelled = cancellationToken?.IsCancellationRequested ?? false;
                 var maskedCommand = Options.SensitiveDataToMask.As(q => MaskSensitiveData(Options.Command, q)).Or(Options.Command);
                 var maskedArguments = Options.SensitiveDataToMask.As(q => MaskSensitiveData(command.Arguments, q)).Or(command.Arguments);
                 var maskedErrorMessage = Options.SensitiveDataToMask.As(q => MaskSensitiveData(stdErrSb.ToString(), q)).Or(stdErrSb.ToString());
@@ -182,6 +188,7 @@ namespace Talos.Docker.Services
                     Duration = stopwatch.Elapsed,
                     WasTimedOut = wasTimedOut,
                     WasKilled = wasKilled,
+                    WasCancelled = wasCancelled,
                     StdErr = maskedErrorMessage
                 }, ex);
 
@@ -199,17 +206,19 @@ namespace Talos.Docker.Services
                     Duration = stopwatch.Elapsed,
                     WasTimedOut = false,
                     WasKilled = false,
+                    WasCancelled = false,
                     ExitCode = ex.ExitCode,
                     StdErr = maskedErrorMessage
                 }, ex);
             }
             finally
             {
-                if (cts.HasValue)
-                {
-                    cts.Value.InterruptCts.Dispose();
-                    cts.Value.KillCts.Dispose();
-                }
+                if (timeoutCts.HasValue)
+                    timeoutCts.Value.Dispose();
+                if (interruptCts.HasValue)
+                    interruptCts.Value.Dispose();
+                if (killCts.HasValue)
+                    killCts.Value.Dispose();
             }
 
             stopwatch.Stop();

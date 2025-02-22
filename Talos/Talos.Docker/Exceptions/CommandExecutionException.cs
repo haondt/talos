@@ -8,15 +8,23 @@ namespace Talos.Docker.Exceptions
         private static string ComposeErrorMessage(FailedCommandResult result)
         {
             var sb = new StringBuilder();
-            sb.AppendLine("Execution failed due to command result.");
+            if (result.WasCancelled)
+                sb.AppendLine("The process was cancelled.");
+            else if (result.WasKilled)
+                sb.AppendLine("The process was killed before it could finish.");
+            else if (result.WasTimedOut)
+                sb.AppendLine("The process was cancelled before it could finish.");
+            else
+                sb.AppendLine("Execution failed due to command result.");
             sb.AppendLine($"Command: {result.Command} {result.Arguments}");
             sb.AppendLine($"Duration: {result.Duration}");
             sb.AppendLine($"Timed out: {result.WasTimedOut}");
             sb.AppendLine($"Was killed: {result.WasKilled}");
+            sb.AppendLine($"Was cancelled: {result.WasCancelled}");
             if (result.ExitCode.HasValue)
                 sb.AppendLine($"Exit code: {result.ExitCode.Value}");
             if (result.StdErr.HasValue)
-                sb.AppendLine($"StdOut: {result.StdErr.Value}");
+                sb.AppendLine($"StdErr: {result.StdErr.Value}");
 
             return sb.ToString();
         }

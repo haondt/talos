@@ -17,37 +17,15 @@ namespace Talos.Docker.Services
             _commandFactory = commandFactory;
         }
 
-        public async Task<List<string>> GetContainersAsync()
+        public async Task<List<string>> GetContainersAsync(CancellationToken? cancellationToken = null)
         {
-            //var result = await PrepareDockerCommand(ab => ab
-            //        .Add("inspect")
-            //        .Add("--format")
-            //        .Add("{{ index .Config.Labels \"org.opencontainers.image.version\" }}")
-            //        .Add("open-webui\" && ls"))
-            //    .ExecuteAndCaptureStdoutAsync();
             var result = await PrepareDockerCommand(ab => ab
                     .Add("ps")
+                    //.Add("-a")
                     .Add("--format")
                     .Add("{{ .Names }}"))
-                .ExecuteAndCaptureStdoutAsync();
+                .ExecuteAndCaptureStdoutAsync(cancellationToken);
             return result.Trim().Split('\n').ToList();
-
-
-
-            //var sshcmd = new ArgumentsBuilder()
-            //    .Add("docker")
-            //    .Add("inspect")
-            //    .Add("--format")
-            //    .Add("{{ index .Config.Labels \"org.opencontainers.image.version\" }}")
-            //    .Add("alloy && ls -la")
-            //    .Build();
-
-            //var finalArgs = new ArgumentsBuilder()
-            //    .Add("-o")
-            //    .Add("StrictHostKeyChecking=no")
-            //    .Add("$MYHOST")
-            //    .Add(sshcmd).Build();
-
         }
 
         private CommandBuilder PrepareCommand(string command, Action<ArgumentsBuilder>? arguments = null)

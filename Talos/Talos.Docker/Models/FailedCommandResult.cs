@@ -8,6 +8,7 @@ namespace Talos.Docker.Models
         TimeSpan Duration,
         bool WasTimedOut,
         bool WasKilled,
+        bool WasCancelled,
         Optional<int> ExitCode = default,
         Optional<string> StdErr = default)
     {

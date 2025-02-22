@@ -17,7 +17,21 @@ namespace Talos.Domain.Commands
             var title = "List Containers";
             var color = Color.Purple;
 
-            await DeferAsync();
+            using var processHandle = processRegistry.RegisterProcess();
+
+            var initialEmbed = new EmbedBuilder()
+                .WithTitle("Working on it...")
+                .WithColor(Color.Parse("#e8ce25"))
+                .Build();
+            var button = new ButtonBuilder()
+                .WithCustomId($"cancel-process-{processHandle.Id}")
+                .WithLabel("Cancel")
+                .WithStyle(ButtonStyle.Danger);
+            var component = new ComponentBuilder()
+                .WithButton(button)
+                .Build();
+
+            await RespondAsync(embed: initialEmbed, components: component);
 
             try
             {
@@ -27,13 +41,7 @@ namespace Talos.Domain.Commands
                     throw new ArgumentException($"The specified host '{host}' is not available.");
 
                 var dockerClient = dockerClientFactory.Connect(host);
-                var containers = await dockerClient.GetContainersAsync();
-                //// TODO: dummy data
-                //await Task.Delay(100);
-                //var containers = new List<string>
-                //{
-                //    "foo", "bar", "baz"
-                //};
+                var containers = await dockerClient.GetContainersAsync(processHandle.CancellationToken);
 
                 var containersSb = new StringBuilder();
                 if (containers.Count > 0)
@@ -63,7 +71,7 @@ namespace Talos.Domain.Commands
                     .WithTimestamp(DateTimeOffset.UtcNow);
                 var embed = embedBuilder.Build();
 
-                await ModifyOriginalResponseAsync(m => m.Embed = embed);
+                await ModifyOriginalResponseAsync(m => { m.Embed = embed; m.Components = new ComponentBuilder().Build(); });
             }
             catch (Exception ex)
             {
@@ -77,7 +85,7 @@ namespace Talos.Domain.Commands
                     .WithColor(Color.Red)
                     .WithTimestamp(DateTimeOffset.UtcNow)
                     .Build();
-                await ModifyOriginalResponseAsync(m => m.Embed = errorEmbed);
+                await ModifyOriginalResponseAsync(m => { m.Embed = errorEmbed; m.Components = new ComponentBuilder().Build(); });
                 throw;
             }
         }

@@ -2,6 +2,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Talos.Discord.Extensions;
 using Talos.Discord.Models;
+using Talos.Domain.Abstractions;
 using Talos.Domain.Commands;
 using Talos.Domain.Services;
 
@@ -15,6 +16,7 @@ namespace Talos.Domain.Extensions
             services.AddHostedService<TalosService>();
 
             services.RegisterInteraction<TalosCommandGroup>();
+            services.AddSingleton<IDiscordCommandProcessRegistry, DiscordCommandProcessRegistry>();
             return services;
         }
     }
