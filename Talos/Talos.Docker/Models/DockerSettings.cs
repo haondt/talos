@@ -2,10 +2,10 @@
 {
     public class DockerSettings
     {
-        public Dictionary<string, DockerClientSettings> Clients { get; set; } = [];
+        public Dictionary<string, DockerHostSettings> Hosts { get; set; } = [];
     }
 
-    public class DockerClientSettings
+    public class DockerHostSettings
     {
         public DockerVersion DockerVersion { get; set; } = DockerVersion.V2;
         public string Host { get; set; } = DockerConstants.LOCALHOST;

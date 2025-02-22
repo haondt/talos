@@ -14,7 +14,7 @@ namespace Talos.Domain.Extensions
             services.Configure<DiscordSettings>(configuration.GetSection(nameof(DiscordSettings)));
             services.AddHostedService<TalosService>();
 
-            services.RegisterInteraction<ContainersCommand>();
+            services.RegisterInteraction<TalosCommandGroup>();
             return services;
         }
     }

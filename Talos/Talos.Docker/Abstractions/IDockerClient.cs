@@ -2,5 +2,6 @@
 {
     public interface IDockerClient
     {
+        //Task<List<string>> GetContainersAsync();
     }
 }

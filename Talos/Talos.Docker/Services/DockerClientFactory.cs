@@ -11,7 +11,7 @@ namespace Talos.Docker.Services
     {
         public IDockerClient Connect(string host)
         {
-            var settings = options.Value.Clients[host];
+            var settings = options.Value.Hosts[host];
             return ActivatorUtilities.CreateInstance<DockerClient>(serviceProvider, new DockerClientOptions
             {
                 Host = settings.Host == DockerConstants.LOCALHOST
@@ -19,6 +19,11 @@ namespace Talos.Docker.Services
                 DockerVersion = settings.DockerVersion,
                 ForceRecreateOnUp = settings.ForceRecreateOnUp
             });
+        }
+
+        public List<string> GetHosts()
+        {
+            return options.Value.Hosts.Keys.ToList();
         }
     }
 }

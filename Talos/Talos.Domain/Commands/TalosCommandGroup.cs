@@ -1,9 +1,11 @@
 ﻿using Discord.Interactions;
+using Talos.Docker.Abstractions;
 
 namespace Talos.Domain.Commands
 {
-    [Group("talos", "Talos")]
-    public class TalosCommandGroup : InteractionModuleBase<SocketInteractionContext>
+    [Group("t", "Talos")]
+    public partial class TalosCommandGroup(IDockerClientFactory dockerClientFactory)
+        : InteractionModuleBase<SocketInteractionContext>
     {
 
     }
