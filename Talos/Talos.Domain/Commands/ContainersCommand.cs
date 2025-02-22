@@ -27,13 +27,13 @@ namespace Talos.Domain.Commands
                     throw new ArgumentException($"The specified host '{host}' is not available.");
 
                 var dockerClient = dockerClientFactory.Connect(host);
-                //var containers = await dockerClient.GetContainersAsync();
-                // TODO: dummy data
-                await Task.Delay(100);
-                var containers = new List<string>
-                {
-                    "foo", "bar", "baz"
-                };
+                var containers = await dockerClient.GetContainersAsync();
+                //// TODO: dummy data
+                //await Task.Delay(100);
+                //var containers = new List<string>
+                //{
+                //    "foo", "bar", "baz"
+                //};
 
                 var containersSb = new StringBuilder();
                 if (containers.Count > 0)
@@ -69,7 +69,7 @@ namespace Talos.Domain.Commands
             {
                 var errorEmbed = new EmbedBuilder()
                     .WithTitle("Command Execution Failed")
-                    .WithDescription(ex.Message)
+                    .WithDescription("> " + string.Join("\n> ", ex.Message.Trim().Split('\n')))
                     .WithFields(
                         new EmbedFieldBuilder()
                             .WithName("Parameters")

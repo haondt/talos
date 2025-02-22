@@ -13,7 +13,8 @@ namespace Talos.Docker.Exceptions
             sb.AppendLine($"Duration: {result.Duration}");
             sb.AppendLine($"Timed out: {result.WasTimedOut}");
             sb.AppendLine($"Was killed: {result.WasKilled}");
-            sb.AppendLine($"Exit code: {result.ExitCode}");
+            if (result.ExitCode.HasValue)
+                sb.AppendLine($"Exit code: {result.ExitCode.Value}");
             if (result.StdErr.HasValue)
                 sb.AppendLine($"StdOut: {result.StdErr.Value}");
 

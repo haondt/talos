@@ -1,4 +1,5 @@
-﻿using Talos.Docker.Abstractions;
+﻿using CliWrap.Builders;
+using Talos.Docker.Abstractions;
 using Talos.Docker.Models;
 
 namespace Talos.Docker.Services
@@ -7,8 +8,6 @@ namespace Talos.Docker.Services
     {
         private readonly DockerClientOptions _options;
         private readonly ICommandFactory _commandFactory;
-        private string _dockerComposeBinary;
-
 
         public DockerClient(
             DockerClientOptions options,
@@ -16,20 +15,104 @@ namespace Talos.Docker.Services
         {
             _options = options;
             _commandFactory = commandFactory;
-
-            _dockerComposeBinary = _options.DockerVersion switch
-            {
-                DockerVersion.V1 => "docker-compose",
-                DockerVersion.V2 => "docker",
-                _ => throw new InvalidOperationException($"Unknown docker version {_options.DockerVersion}")
-            };
         }
 
-        //private async Task<CommandResult> RunDockerCommandAsync(string arguments)
-        //{
-        //    await _commandFactory.Create
-        //    return await _runner.RunCommandAsync(binary, arguments);
-        //}
+        public async Task<List<string>> GetContainersAsync()
+        {
+            //var result = await PrepareDockerCommand(ab => ab
+            //        .Add("inspect")
+            //        .Add("--format")
+            //        .Add("{{ index .Config.Labels \"org.opencontainers.image.version\" }}")
+            //        .Add("open-webui\" && ls"))
+            //    .ExecuteAndCaptureStdoutAsync();
+            var result = await PrepareDockerCommand(ab => ab
+                    .Add("ps")
+                    .Add("--format")
+                    .Add("{{ .Names }}"))
+                .ExecuteAndCaptureStdoutAsync();
+            return result.Trim().Split('\n').ToList();
+
+
+
+            //var sshcmd = new ArgumentsBuilder()
+            //    .Add("docker")
+            //    .Add("inspect")
+            //    .Add("--format")
+            //    .Add("{{ index .Config.Labels \"org.opencontainers.image.version\" }}")
+            //    .Add("alloy && ls -la")
+            //    .Build();
+
+            //var finalArgs = new ArgumentsBuilder()
+            //    .Add("-o")
+            //    .Add("StrictHostKeyChecking=no")
+            //    .Add("$MYHOST")
+            //    .Add(sshcmd).Build();
+
+        }
+
+        private CommandBuilder PrepareCommand(string command, Action<ArgumentsBuilder>? arguments = null)
+        {
+            switch (_options.HostOptions)
+            {
+                case LocalDockerHostOptions:
+                    {
+                        var result = _commandFactory.Create(command);
+                        if (arguments != null)
+                            result = result.WithArguments(arguments);
+                        return result;
+                    }
+                case SSHDockerHostOptions sshOptions:
+                    {
+                        string remoteCommand;
+                        if (arguments != null)
+                        {
+                            var ab = new ArgumentsBuilder();
+                            arguments.Invoke(ab);
+                            remoteCommand = $"{command} {ab.Build()}";
+                        }
+                        else
+                        {
+                            remoteCommand = command;
+                        }
+
+                        var sensitiveData = new List<string>();
+                        var result = _commandFactory.Create("ssh")
+                            .WithArguments(ab =>
+                            {
+                                ab
+                                    .Add("-o")
+                                    .Add("StrictHostKeyChecking=no")
+                                    .Add("-o")
+                                    .Add("LogLevel=ERROR");
+                                switch (_options.HostOptions)
+                                {
+                                    case SSHIdentityFileDockerHostOptions identityFileOptions:
+                                        ab.Add("-i");
+                                        ab.Add(identityFileOptions.IdentityFile);
+                                        sensitiveData.Add(identityFileOptions.IdentityFile);
+                                        break;
+                                    default:
+                                        throw new ArgumentException($"Unknown ssh options type: {_options.HostOptions.GetType()}");
+                                }
+                                ab.Add($"{sshOptions.User}@{sshOptions.Host}");
+                                sensitiveData.Add(sshOptions.Host);
+                                ab.Add(remoteCommand);
+                            });
+
+                        foreach (var sd in sensitiveData)
+                            result = result.WithSensitiveDataMasked(sd);
+                        return result;
+                    }
+
+                default:
+                    throw new ArgumentException($"Unknown host options type: {_options.HostOptions.GetType()}");
+            }
+        }
+
+        private CommandBuilder PrepareDockerCommand(Action<ArgumentsBuilder> arguments)
+        {
+            return PrepareCommand(DockerConstants.DOCKER_BINARY, arguments);
+        }
 
         //private async Task<CommandResult> RunDockerComposeCommandAsync(string arguments)
         //{

@@ -1,5 +1,4 @@
-﻿using Haondt.Core.Models;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Talos.Docker.Abstractions;
 using Talos.Docker.Models;
@@ -12,13 +11,29 @@ namespace Talos.Docker.Services
         public IDockerClient Connect(string host)
         {
             var settings = options.Value.Hosts[host];
+
             return ActivatorUtilities.CreateInstance<DockerClient>(serviceProvider, new DockerClientOptions
             {
-                Host = settings.Host == DockerConstants.LOCALHOST
-                    ? new Optional<string>() : new(settings.Host),
+                HostOptions = DetermineHostOptions(settings),
                 DockerVersion = settings.DockerVersion,
                 ForceRecreateOnUp = settings.ForceRecreateOnUp
             });
+        }
+
+        private static DockerHostOptions DetermineHostOptions(DockerHostSettings hostSettings)
+        {
+            if (hostSettings.SSHConfig != null)
+            {
+                if (hostSettings.SSHConfig.IdentityFile != null)
+                    return new SSHIdentityFileDockerHostOptions
+                    {
+                        User = hostSettings.SSHConfig.User,
+                        Host = hostSettings.SSHConfig.Host,
+                        IdentityFile = hostSettings.SSHConfig.IdentityFile
+                    };
+            }
+
+            return new LocalDockerHostOptions();
         }
 
         public List<string> GetHosts()
