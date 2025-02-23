@@ -10,8 +10,8 @@ namespace Talos.Domain.Models.DiscordEmbedSocket
         public Haondt.Core.Models.Optional<Color> Color { get; set; }
         public Haondt.Core.Models.Optional<string> CancelButtonId { get; set; }
 
-        public bool DeferOnCreate { get; set; } = true;
-        public bool SendEmbedOnCreate { get; set; } = false;
+        public bool DeferOnCreate { get; set; } = false;
+        public bool SendEmbedOnCreate { get; set; } = true;
 
     }
 
@@ -77,7 +77,10 @@ namespace Talos.Domain.Models.DiscordEmbedSocket
                 socket.State.HasSentInitialResponse = true;
             }
             if (options.SendEmbedOnCreate)
-                await socket.RegenerateEmbed();
+            {
+                await socket.UpdateAsync(b => b.SetDescription("### Talos is thinking..."));
+                socket.StageUpdate(b => b.ClearDescription());
+            }
 
             return socket;
         }
@@ -102,6 +105,16 @@ namespace Talos.Domain.Models.DiscordEmbedSocket
     {
         private readonly List<Action<DiscordEmbedSocket>> _actions = [];
         private bool _willDirtyState = false;
+
+        public DiscordEmbedSocketUpdateBuilder ClearDescription()
+        {
+            _actions.Add(s =>
+            {
+                s.State.DescriptionParts = [];
+            });
+            _willDirtyState = true;
+            return this;
+        }
 
         public DiscordEmbedSocketUpdateBuilder SetDescription(string newDescription)
         {

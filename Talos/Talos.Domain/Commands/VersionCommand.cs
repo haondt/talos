@@ -7,12 +7,16 @@ namespace Talos.Domain.Commands
 {
     public partial class TalosCommandGroup
     {
-        [SlashCommand("containers", "List the containers running on the host")]
-        public async Task ContainersCommand(
+        [SlashCommand("version", "Get the version of a container")]
+        public async Task VersionCommand(
             [
                 Summary("host", "Host name"),
                 Autocomplete(typeof(HostAutocompleteHandler))
-            ] string host)
+            ] string host,
+            [
+                Summary("container", "Container name"),
+                Autocomplete(typeof(ContainerAutocompleteHandler))
+            ] string container)
         {
             using var processHandle = processRegistry.RegisterProcess();
             var cancellationId = $"cancel-process-{processHandle.Id}";
@@ -23,8 +27,8 @@ namespace Talos.Domain.Commands
             });
 
             socket.StageUpdate(b => b
-                .AddDescriptionPart("**List containers**")
-                .AddDescriptionPart($"-# {host}"));
+                .AddDescriptionPart("**Get container image version**")
+                .AddDescriptionPart($"-# {host} » {container}"));
 
             try
             {
@@ -34,17 +38,12 @@ namespace Talos.Domain.Commands
                     throw new ArgumentException($"The specified host '{host}' is not available.");
 
                 var dockerClient = dockerClientFactory.Connect(host);
-                var containers = await dockerClient.GetContainersAsync(processHandle.CancellationToken);
+                var version = await dockerClient.GetContainerVersionAsync(container, processHandle.CancellationToken);
+                var imageName = await dockerClient.GetContainerImageNameAsync(container, processHandle.CancellationToken);
+                var imageDigest = await dockerClient.GetContainerImageDigestAsync(container, processHandle.CancellationToken);
 
-                if (containers.Count > 0)
-                {
-                    await socket.UpdateAsync(b => b
-                        .AddDescriptionPart("```\n" + string.Join(' ', containers) + "\n```")
-                        .AddDescriptionPart($"Total: {containers.Count}"));
-                }
-                else
-                    await socket.UpdateAsync(b => b
-                        .AddDescriptionPart("No containers are currently running on this host."));
+                await socket.UpdateAsync(b => b
+                    .AddDescriptionPart($"```\n{imageName}\n{version}\n\n{imageDigest}\n```"));
             }
             catch (Exception ex)
             {
@@ -52,7 +51,6 @@ namespace Talos.Domain.Commands
                     .SetColor(Color.Red)
                     .AddDescriptionPart("### Command execution failed")
                     .AddDescriptionPart("> " + string.Join("\n> ", ex.Message.Trim().Split('\n'))));
-
                 throw;
             }
         }

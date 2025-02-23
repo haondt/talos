@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using System.Collections.Concurrent;
 using Talos.Docker.Abstractions;
 using Talos.Docker.Models;
 
@@ -8,15 +9,20 @@ namespace Talos.Docker.Services
     public class DockerClientFactory(IOptions<DockerSettings> options,
         IServiceProvider serviceProvider) : IDockerClientFactory
     {
+        ConcurrentDictionary<string, IDockerClient> _clients = [];
+
         public IDockerClient Connect(string host)
         {
-            var settings = options.Value.Hosts[host];
-
-            return ActivatorUtilities.CreateInstance<DockerClient>(serviceProvider, new DockerClientOptions
+            return _clients.GetOrAdd(host, h =>
             {
-                HostOptions = DetermineHostOptions(settings),
-                DockerVersion = settings.DockerVersion,
-                ForceRecreateOnUp = settings.ForceRecreateOnUp
+                var settings = options.Value.Hosts[host];
+
+                return ActivatorUtilities.CreateInstance<DockerClient>(serviceProvider, new DockerClientOptions
+                {
+                    HostOptions = DetermineHostOptions(settings),
+                    DockerVersion = settings.DockerVersion,
+                    ForceRecreateOnUp = settings.ForceRecreateOnUp
+                });
             });
         }
 

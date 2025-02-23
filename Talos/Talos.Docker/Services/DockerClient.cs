@@ -1,4 +1,5 @@
 ﻿using CliWrap.Builders;
+using Haondt.Core.Models;
 using Talos.Docker.Abstractions;
 using Talos.Docker.Models;
 
@@ -8,6 +9,9 @@ namespace Talos.Docker.Services
     {
         private readonly DockerClientOptions _options;
         private readonly ICommandFactory _commandFactory;
+
+        private (AbsoluteDateTime CachedAt, List<string> Containers)? _containerListCache;
+        private static readonly TimeSpan CACHE_DURATION = TimeSpan.FromHours(1);
 
         public DockerClient(
             DockerClientOptions options,
@@ -25,7 +29,51 @@ namespace Talos.Docker.Services
                     .Add("--format")
                     .Add("{{ .Names }}"))
                 .ExecuteAndCaptureStdoutAsync(cancellationToken);
-            return result.Trim().Split('\n').ToList();
+            var containers = result.Trim().Split('\n').ToList();
+            _containerListCache = (AbsoluteDateTime.Now, containers);
+            return containers;
+        }
+        public async Task<string> GetContainerVersionAsync(string container, CancellationToken? cancellationToken = null)
+        {
+            var result = await PrepareDockerCommand(ab => ab
+                    .Add("inspect")
+                    .Add("--format")
+                    .Add("{{ index .Config.Labels \"org.opencontainers.image.version\" }}")
+                    .Add(container))
+                .ExecuteAndCaptureStdoutAsync(cancellationToken);
+
+            if (string.IsNullOrWhiteSpace(result))
+                throw new ArgumentException("Container is missing label 'org.opencontainers.image.version'.");
+
+            return result.Trim();
+        }
+        public async Task<string> GetContainerImageNameAsync(string container, CancellationToken? cancellationToken = null)
+        {
+            var result = await PrepareDockerCommand(ab => ab
+                    .Add("inspect")
+                    .Add("--format")
+                    .Add("{{ .Config.Image }}")
+                    .Add(container))
+                .ExecuteAndCaptureStdoutAsync(cancellationToken);
+            return result.Trim();
+        }
+        public async Task<string> GetContainerImageDigestAsync(string container, CancellationToken? cancellationToken = null)
+        {
+            var result = await PrepareDockerCommand(ab => ab
+                    .Add("inspect")
+                    .Add("--format")
+                    .Add("{{ .Image }}")
+                    .Add(container))
+                .ExecuteAndCaptureStdoutAsync(cancellationToken);
+            return result.Trim();
+        }
+
+        public async Task<List<string>> GetCachedContainersAsync(CancellationToken? cancellationToken = null)
+        {
+            var currentCache = _containerListCache;
+            if (currentCache.HasValue && AbsoluteDateTime.Now - currentCache.Value.CachedAt < CACHE_DURATION)
+                return currentCache.Value.Containers;
+            return await GetContainersAsync(cancellationToken);
         }
 
         private CommandBuilder PrepareCommand(string command, Action<ArgumentsBuilder>? arguments = null)
