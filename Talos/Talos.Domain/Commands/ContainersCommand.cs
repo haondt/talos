@@ -2,6 +2,7 @@
 using Discord.Interactions;
 using System.Text;
 using Talos.Domain.Autocompletion;
+using Talos.Domain.Models.DiscordEmbedSocket;
 
 namespace Talos.Domain.Commands
 {
@@ -14,24 +15,21 @@ namespace Talos.Domain.Commands
                 Autocomplete(typeof(HostAutocompleteHandler))
             ] string host)
         {
-            var title = "List Containers";
-            var color = Color.Purple;
-
             using var processHandle = processRegistry.RegisterProcess();
+            var cancellationId = $"cancel-process-{processHandle.Id}";
+            await using var socket = await DiscordEmbedSocket.OpenSocketAsync(this, o =>
+            {
+                o.CancelButtonId = cancellationId;
+                o.Title = "List Containers";
+                o.Color = Color.Purple;
+            });
 
-            var initialEmbed = new EmbedBuilder()
-                .WithTitle("Working on it...")
-                .WithColor(Color.Parse("#e8ce25"))
-                .Build();
-            var button = new ButtonBuilder()
-                .WithCustomId($"cancel-process-{processHandle.Id}")
-                .WithLabel("Cancel")
-                .WithStyle(ButtonStyle.Danger);
-            var component = new ComponentBuilder()
-                .WithButton(button)
-                .Build();
-
-            await RespondAsync(embed: initialEmbed, components: component);
+            socket.StageUpdate(b => b
+                .AddStaticField(new()
+                {
+                    Name = "Parameters",
+                    Value = $"```\nhost:{host}\n```"
+                }));
 
             try
             {
@@ -54,38 +52,29 @@ namespace Talos.Domain.Commands
                 else
                     containersSb.Append("No containers are currently running on this host.");
 
+                await socket.UpdateAsync(b => b
+                    .SetDescription(containersSb.ToString())
+                    .AddStaticField(new()
+                    {
+                        Name = "Host",
+                        Value = host,
+                        IsInline = true
+                    })
+                    .AddStaticField(new()
+                    {
+                        Name = "Count",
+                        Value = containers.Count.ToString(),
+                        IsInline = true
+                    }));
 
-                var embedBuilder = new EmbedBuilder()
-                    .WithTitle(title)
-                    .WithDescription(containersSb.ToString())
-                    .WithFields(
-                        new EmbedFieldBuilder()
-                            .WithName("Host")
-                            .WithValue(host)
-                            .WithIsInline(true),
-                        new EmbedFieldBuilder()
-                            .WithName("Count")
-                            .WithValue(containers.Count)
-                            .WithIsInline(true))
-                    .WithColor(color)
-                    .WithTimestamp(DateTimeOffset.UtcNow);
-                var embed = embedBuilder.Build();
-
-                await ModifyOriginalResponseAsync(m => { m.Embed = embed; m.Components = new ComponentBuilder().Build(); });
             }
             catch (Exception ex)
             {
-                var errorEmbed = new EmbedBuilder()
-                    .WithTitle("Command Execution Failed")
-                    .WithDescription("> " + string.Join("\n> ", ex.Message.Trim().Split('\n')))
-                    .WithFields(
-                        new EmbedFieldBuilder()
-                            .WithName("Parameters")
-                            .WithValue($"`host:{host}`"))
-                    .WithColor(Color.Red)
-                    .WithTimestamp(DateTimeOffset.UtcNow)
-                    .Build();
-                await ModifyOriginalResponseAsync(m => { m.Embed = errorEmbed; m.Components = new ComponentBuilder().Build(); });
+                await socket.UpdateAsync(b => b
+                    .SetColor(Color.Red)
+                    .SetTitle("Command Execution Failed")
+                    .SetDescription("> " + string.Join("\n> ", ex.Message.Trim().Split('\n'))));
+
                 throw;
             }
         }
