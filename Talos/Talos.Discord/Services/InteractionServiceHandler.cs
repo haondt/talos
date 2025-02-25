@@ -70,14 +70,14 @@ namespace Talos.Discord.Services
                     _logger.Log(
                         logLevel,
                         logMessage.Exception,
-                        "[InteractionService] [{Source}] {Message}",
+                        "{Source} {Message}",
                         logMessage.Source,
                         logMessage.Message);
                 else
                     _logger.Log(
                         logLevel,
                         logMessage.Exception,
-                        "[InteractionService] [{Source}]",
+                        "{Source}",
                         logMessage.Source);
             }
             else
@@ -86,13 +86,13 @@ namespace Talos.Discord.Services
                 if (!string.IsNullOrEmpty(logMessage.Message))
                     _logger.Log(
                         logLevel,
-                        "[InteractionService] [{Source}] {Message}",
+                        "{Source} {Message}",
                         logMessage.Source,
                         logMessage.Message);
                 else
                     _logger.Log(
                         logLevel,
-                        "[InteractionService] [{Source}]",
+                        "{Source}",
                         logMessage.Source);
 
             }

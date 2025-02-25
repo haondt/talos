@@ -6,7 +6,7 @@ namespace Talos.Renovate.Abstractions
 {
     public interface IImageUpdaterService
     {
-        Task RunAsync();
-        Task<Optional<(string DesiredImage, BumpSize BumpSize)>> SelectUpdateTarget(string image, BumpSize maxBumpSize);
+        Task RunAsync(CancellationToken? cancellationToken = null);
+        Task<Optional<ImageUpdate>> SelectUpdateTarget(string image, BumpSize maxBumpSize);
     }
 }

@@ -41,6 +41,7 @@ namespace Talos.Renovate.Models
         public List<string>? IncludeGlobs { get; set; }
         public List<string>? ExcludeGlobs { get; set; }
         public required string Schedule { get; set; }
+        public bool CreateMergeRequestsForPushes { get; set; } = false;
     }
 
     public class HostConfiguration

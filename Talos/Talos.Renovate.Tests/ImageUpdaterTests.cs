@@ -1,4 +1,4 @@
-﻿using FluentAssertions;
+using FluentAssertions;
 using Haondt.Core.Extensions;
 using Haondt.Core.Models;
 using Microsoft.Extensions.Options;
@@ -18,6 +18,8 @@ namespace Talos.Renovate.Tests
             var mockRedisDatabase = new Mock<IDatabase>();
             var mockRedisProvider = new Mock<IRedisProvider>();
             mockRedisProvider.Setup(q => q.GetDatabase(It.IsAny<int>())).Returns(mockRedisDatabase.Object);
+            var mockGitHostProvider = new Mock<IGitHostServiceProvider>();
+            var mockDockerComposeFileService = new Mock<IDockerComposeFileService>();
             return new ImageUpdaterService(
                 Options.Create(new Models.ImageUpdateSettings
                 {
@@ -28,7 +30,9 @@ namespace Talos.Renovate.Tests
                 new FakeLogger<ImageUpdaterService>(),
                 new FakeNotificationService(),
                 skopeoService,
-                mockRedisProvider.Object);
+                mockRedisProvider.Object,
+                mockGitHostProvider.Object,
+                mockDockerComposeFileService.Object);
         }
 
         public static IEnumerable<object[]> GetTestData()
@@ -46,15 +50,23 @@ namespace Talos.Renovate.Tests
                     ("debian", "sha256:003"),
                 ],
                 ["image3"] = [
-                    ("v2.3.4", "sha256:003"),
-                    ("v2.3.3", "sha256:003"),
+                    ("v2.3.4", "sha256:001"),
+                    ("v2.3.3", "sha256:002"),
                     ("v2.3.5", "sha256:003"),
-                    ("v2.3", "sha256:003"),
-                    ("v2.4", "sha256:003"),
-                    ("v2.2", "sha256:003"),
-                    ("v3", "sha256:003"),
-                    ("v4", "sha256:003"),
-                    ("v2", "sha256:003"),
+                    ("v2.4.4", "sha256:010"),
+                    ("v2.4.3", "sha256:011"),
+                    ("v2.4.5", "sha256:012"),
+                    ("v2.3", "sha256:004"),
+                    ("v2.4", "sha256:005"),
+                    ("v2.2", "sha256:006"),
+                    ("v2", "sha256:009"),
+                    ("v1.2.3", "sha256:00a"),
+                    ("v1.2", "sha256:00b"),
+                    ("v1", "sha256:00c"),
+                    ("v3.4.5", "sha256:00d"),
+                    ("v3.4", "sha256:00e"),
+                    ("v3", "sha256:00f"),
+                    ("v4", "sha256:008"),
                 ],
                 ["image4"] = [
                     ("stable", "sha256:001")
@@ -99,7 +111,22 @@ namespace Talos.Renovate.Tests
                     ("v3-debian", "sha256:022"),
                     ("v4-debian", "sha256:023"),
                     ("v2-debian", "sha256:024"),
-                ]
+                ],
+                ["image7"] = [
+                    ("1", "sha256:001"),
+                    ("1.1", "sha256:002"),
+                    ("1.1.1", "sha256:003"),
+                    ("1.1.2", "sha256:004"),
+                    ("1.2", "sha256:005"),
+                    ("1.2.1", "sha256:006"),
+                    ("1.2.2", "sha256:007"),
+                    ("2", "sha256:008"),
+                    ("2.1", "sha256:009"),
+                    ("2.1.1", "sha256:00a"),
+                    ("2.1.2", "sha256:00b"),
+                    ("2.2", "sha256:00c"),
+                    ("2.2.2", "sha256:00d"),
+                ],
 
             };
 
@@ -149,6 +176,92 @@ namespace Talos.Renovate.Tests
                 ("image6", "stable-alpine@sha256:00e", BumpSize.Major),
                 ("image6", "latest-ubuntu", BumpSize.Major),
                 ("image6", "latest-ubuntu@sha256:000", BumpSize.Major),
+
+                // test semantic version
+                ("image3", "v2", BumpSize.Major, "v4@sha256:008", BumpSize.Major),
+                ("image3", "v2", BumpSize.Minor, "v2@sha256:009", BumpSize.Digest),
+                ("image3", "v2", BumpSize.Patch, "v2@sha256:009", BumpSize.Digest),
+                ("image3", "v2", BumpSize.Digest, "v2@sha256:009", BumpSize.Digest),
+                ("image3", "v2@sha256:000", BumpSize.Major, "v4@sha256:008", BumpSize.Major),
+                ("image3", "v2@sha256:000", BumpSize.Minor, "v2@sha256:009", BumpSize.Digest),
+                ("image3", "v2@sha256:000", BumpSize.Patch, "v2@sha256:009", BumpSize.Digest),
+                ("image3", "v2@sha256:000", BumpSize.Digest, "v2@sha256:009", BumpSize.Digest),
+                ("image3", "v2@sha256:009", BumpSize.Major, "v4@sha256:008", BumpSize.Major),
+                ("image3", "v2@sha256:009", BumpSize.Minor),
+                ("image3", "v2@sha256:009", BumpSize.Patch),
+                ("image3", "v2@sha256:009", BumpSize.Digest),
+
+                ("image3", "v2.3", BumpSize.Major, "v3.4@sha256:00e", BumpSize.Major),
+                ("image3", "v2.3", BumpSize.Minor, "v2.4@sha256:005", BumpSize.Minor),
+                ("image3", "v2.3", BumpSize.Patch, "v2.3@sha256:004", BumpSize.Digest),
+                ("image3", "v2.3", BumpSize.Digest, "v2.3@sha256:004", BumpSize.Digest),
+                ("image3", "v2.3@sha256:000", BumpSize.Major, "v3.4@sha256:00e", BumpSize.Major),
+                ("image3", "v2.3@sha256:000", BumpSize.Minor, "v2.4@sha256:005", BumpSize.Minor),
+                ("image3", "v2.3@sha256:000", BumpSize.Patch, "v2.3@sha256:004", BumpSize.Digest),
+                ("image3", "v2.3@sha256:000", BumpSize.Digest, "v2.3@sha256:004", BumpSize.Digest),
+                ("image3", "v2.3@sha256:004", BumpSize.Major, "v3.4@sha256:00e", BumpSize.Major),
+                ("image3", "v2.3@sha256:004", BumpSize.Minor, "v2.4@sha256:005", BumpSize.Minor),
+                ("image3", "v2.3@sha256:004", BumpSize.Patch),
+                ("image3", "v2.3@sha256:004", BumpSize.Digest),
+
+                ("image3", "v2.3.3", BumpSize.Major, "v3.4.5@sha256:00d", BumpSize.Major),
+                ("image3", "v2.3.3", BumpSize.Minor, "v2.4.5@sha256:012", BumpSize.Minor),
+                ("image3", "v2.3.3", BumpSize.Patch, "v2.3.5@sha256:003", BumpSize.Patch),
+                ("image3", "v2.3.3", BumpSize.Digest, "v2.3.3@sha256:002", BumpSize.Digest),
+                ("image3", "v2.3.3@sha256:000", BumpSize.Major, "v3.4.5@sha256:00d", BumpSize.Major),
+                ("image3", "v2.3.3@sha256:000", BumpSize.Minor, "v2.4.5@sha256:012", BumpSize.Minor),
+                ("image3", "v2.3.3@sha256:000", BumpSize.Patch, "v2.3.5@sha256:003", BumpSize.Patch),
+                ("image3", "v2.3.3@sha256:000", BumpSize.Digest, "v2.3.3@sha256:002", BumpSize.Digest),
+                ("image3", "v2.3.3@sha256:002", BumpSize.Major, "v3.4.5@sha256:00d", BumpSize.Major),
+                ("image3", "v2.3.3@sha256:002", BumpSize.Minor, "v2.4.5@sha256:012", BumpSize.Minor),
+                ("image3", "v2.3.3@sha256:002", BumpSize.Patch, "v2.3.5@sha256:003", BumpSize.Patch),
+                ("image3", "v2.3.3@sha256:002", BumpSize.Digest),
+
+                ("image7", "1", BumpSize.Major, "2@sha256:008", BumpSize.Major),
+                ("image7", "1", BumpSize.Minor, "1@sha256:001", BumpSize.Digest),
+                ("image7", "1@sha256:000", BumpSize.Major, "2@sha256:008", BumpSize.Major),
+                ("image7", "1@sha256:000", BumpSize.Minor, "1@sha256:001", BumpSize.Digest),
+                ("image7", "1@sha256:001", BumpSize.Major, "2@sha256:008", BumpSize.Major),
+                ("image7", "1@sha256:001", BumpSize.Minor),
+
+                ("image7", "1.1", BumpSize.Major, "2.2@sha256:00c", BumpSize.Major),
+                ("image7", "1.1", BumpSize.Minor, "1.2@sha256:005", BumpSize.Minor),
+                ("image7", "1.1", BumpSize.Patch, "1.1@sha256:002", BumpSize.Digest),
+                ("image7", "1.1@sha256:000", BumpSize.Major, "2.2@sha256:00c", BumpSize.Major),
+                ("image7", "1.1@sha256:000", BumpSize.Minor, "1.2@sha256:005", BumpSize.Minor),
+                ("image7", "1.1@sha256:000", BumpSize.Patch, "1.1@sha256:002", BumpSize.Digest),
+                ("image7", "1.1@sha256:002", BumpSize.Major, "2.2@sha256:00c", BumpSize.Major),
+                ("image7", "1.1@sha256:002", BumpSize.Minor, "1.2@sha256:005", BumpSize.Minor),
+                ("image7", "1.1@sha256:002", BumpSize.Patch),
+
+                ("image7", "1.1.1", BumpSize.Major, "2.2.2@sha256:00d", BumpSize.Major),
+                ("image7", "1.1.1", BumpSize.Minor, "1.2.2@sha256:007", BumpSize.Minor),
+                ("image7", "1.1.1", BumpSize.Patch, "1.1.2@sha256:004", BumpSize.Patch),
+                ("image7", "1.1.1", BumpSize.Digest, "1.1.1@sha256:003", BumpSize.Digest),
+                ("image7", "1.1.1@sha256:000", BumpSize.Major, "2.2.2@sha256:00d", BumpSize.Major),
+                ("image7", "1.1.1@sha256:000", BumpSize.Minor, "1.2.2@sha256:007", BumpSize.Minor),
+                ("image7", "1.1.1@sha256:000", BumpSize.Patch, "1.1.2@sha256:004", BumpSize.Patch),
+                ("image7", "1.1.1@sha256:000", BumpSize.Digest, "1.1.1@sha256:003", BumpSize.Digest),
+                ("image7", "1.1.1@sha256:003", BumpSize.Major, "2.2.2@sha256:00d", BumpSize.Major),
+                ("image7", "1.1.1@sha256:003", BumpSize.Minor, "1.2.2@sha256:007", BumpSize.Minor),
+                ("image7", "1.1.1@sha256:003", BumpSize.Patch, "1.1.2@sha256:004", BumpSize.Patch),
+                ("image7", "1.1.1@sha256:003", BumpSize.Digest),
+
+                ("image6", "v2.3.4", BumpSize.Patch, "v2.3.5@sha256:006", BumpSize.Patch),
+                ("image6", "v2.3.4", BumpSize.Minor, "v2.3.5@sha256:006", BumpSize.Patch),
+                ("image6", "v2.3.4", BumpSize.Major, "v2.3.5@sha256:006", BumpSize.Patch),
+                ("image6", "v2.3", BumpSize.Minor, "v2.4@sha256:008", BumpSize.Minor),
+                ("image6", "v2", BumpSize.Major, "v4@sha256:00b", BumpSize.Major),
+                ("image6", "v2.3.4-alpine", BumpSize.Patch, "v2.3.5-alpine@sha256:012", BumpSize.Patch),
+                ("image6", "v2.3.4-alpine", BumpSize.Minor, "v2.3.5-alpine@sha256:012", BumpSize.Patch),
+                ("image6", "v2.3-alpine", BumpSize.Minor, "v2.4-alpine@sha256:014", BumpSize.Minor),
+                ("image6", "v2-alpine", BumpSize.Major, "v4-alpine@sha256:017", BumpSize.Major),
+                ("image6", "v2.3.4-debian", BumpSize.Patch, "v2.3.5-debian@sha256:01e", BumpSize.Patch),
+                ("image6", "v2.3.4-debian", BumpSize.Minor, "v2.3.5-debian@sha256:01e", BumpSize.Patch),
+                ("image6", "v2.3-debian", BumpSize.Minor, "v2.4-debian@sha256:020", BumpSize.Minor),
+                ("image6", "v2-debian", BumpSize.Major, "v4-debian@sha256:023", BumpSize.Major),
+                ("image6", "v2.3.4@sha256:000", BumpSize.Digest, "v2.3.4@sha256:004", BumpSize.Digest),
+                ("image6", "v2.3.4-alpine@sha256:000", BumpSize.Digest, "v2.3.4-alpine@sha256:010", BumpSize.Digest),
             }.Select(q =>
             {
                 string name;
@@ -189,10 +302,11 @@ namespace Talos.Renovate.Tests
 
             if (result.HasValue)
             {
-                result.Value.DesiredImage.Should().Be($"{name}:{expectedResult.Value.TagAndDigest}", becauseString);
+                result.Value.NewImage.ToString().Should().Be($"{name}:{expectedResult.Value.TagAndDigest}", becauseString);
                 result.Value.BumpSize.Should().Be(expectedResult.Value.BumpSize, becauseString);
             }
-
         }
+
+
     }
 }

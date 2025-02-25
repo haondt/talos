@@ -2,11 +2,11 @@
 
 namespace Talos.Integration.Command.Models
 {
-    public struct CommandOptions
+    public readonly record struct CommandOptions
     {
-        public string Command { get; set; }
-        public Optional<IEnumerable<string>> SensitiveDataToMask { get; set; }
-        public Optional<TimeSpan> Timeout { get; set; }
-        public Optional<TimeSpan> GracePeriod { get; set; }
+        public string Command { get; init; }
+        public Optional<IEnumerable<string>> SensitiveDataToMask { get; init; }
+        public Optional<TimeSpan> Timeout { get; init; }
+        public Optional<TimeSpan> GracePeriod { get; init; }
     }
 }

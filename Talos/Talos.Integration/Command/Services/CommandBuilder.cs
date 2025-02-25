@@ -85,12 +85,12 @@ namespace Talos.Integration.Command.Services
             var maskedCommand = Options.SensitiveDataToMask.As(q => MaskSensitiveData(Options.Command, q)).Or(Options.Command);
             var maskedArguments = Options.SensitiveDataToMask.As(q => MaskSensitiveData(Command.Arguments, q)).Or(Command.Arguments);
 
-            Logger.LogInformation("Executing command: {command} {arguments}",
+            Logger.LogInformation("Executing command: {Command} {Arguments}",
                 maskedCommand, maskedArguments);
             try
             {
                 var result = await InternalExecuteAsync(pipeStdOut, captureStdOut, cancellationToken);
-                Logger.LogInformation("Completed command: {command} {arguments} in {result}",
+                Logger.LogInformation("Completed command: {Command} {Arguments} in {Result}",
                     maskedCommand, maskedArguments, result.Duration);
 
                 return result;
@@ -98,17 +98,17 @@ namespace Talos.Integration.Command.Services
             catch (CommandExecutionException ex)
             {
                 if (ex.Result.WasTimedOut)
-                    Logger.LogWarning("Command {command} {arguments} timed out after {duration}",
+                    Logger.LogWarning("Command {Command} {Arguments} timed out after {Duration}",
                         maskedCommand, maskedArguments, ex.Result.Duration);
                 else if (ex.Result.WasKilled)
-                    Logger.LogWarning("Command {command} {arguments} was killed after {duration}",
+                    Logger.LogWarning("Command {Command} {Arguments} was killed after {Duration}",
                         maskedCommand, maskedArguments, ex.Result.Duration);
                 else
                     if (ex.Result.ExitCode.HasValue)
-                    Logger.LogError("Command {command} {arguments} failed with exit code {exitCode}.",
+                    Logger.LogError("Command {Command} {Arguments} failed with exit code {ExitCode}.",
                         maskedCommand, maskedArguments, ex.Result.ExitCode.Value);
                 else
-                    Logger.LogError("Command {command} {arguments} failed with no exit code.",
+                    Logger.LogError("Command {Command} {Arguments} failed with no exit code.",
                         maskedCommand, maskedArguments);
                 throw;
             }

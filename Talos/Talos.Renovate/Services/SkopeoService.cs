@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using StackExchange.Redis;
 using Talos.Integration.Command.Abstractions;
@@ -15,6 +15,8 @@ namespace Talos.Renovate.Services
         private readonly IDatabase _redis;
         private readonly TimeSpan _cacheDuration;
         private readonly string _keyPrefix;
+        private readonly Dictionary<string, SemaphoreSlim> _semaphores = new();
+        private readonly object _semaphoreLock = new();
 
         public SkopeoService(
             IOptions<SkopeoSettings> options,
@@ -38,7 +40,7 @@ namespace Talos.Renovate.Services
 
         public async Task<SkopeoInspectResponse> Inspect(string image, CancellationToken? cancellationToken = null)
         {
-            var response = await PerformSkopeoOperation("list-tags", image, cancellationToken);
+            var response = await PerformSkopeoOperation("inspect", image, cancellationToken);
             var deserialized = JsonConvert.DeserializeObject<SkopeoInspectResponse>(response)
                 ?? throw new JsonSerializationException($"Failed to deserialize skopeo response for inspect {image}");
             return deserialized;
@@ -52,16 +54,44 @@ namespace Talos.Renovate.Services
             if (!cachedResponse.IsNull)
                 return cachedResponse.ToString();
 
-            var output = await _commandFactory.Create(_settings.SkopeoCommand)
-                .WithArguments(a => a
-                    .AddRange(_settings.SkopeoArguments)
-                    .Add(operation)
-                    .Add(image))
-                .ExecuteAndCaptureStdoutAsync(cancellationToken);
+            // limit throughput to 1 request per cacheKey at a time
+            SemaphoreSlim semaphore;
+            lock (_semaphoreLock)
+            {
+                semaphore = _semaphores.TryGetValue(cacheKey, out var existingSemaphore)
+                    ? existingSemaphore
+                    : _semaphores[cacheKey] = new SemaphoreSlim(1, 1);
+            }
+            await semaphore.WaitAsync(cancellationToken ?? CancellationToken.None);
 
-            await _redis.StringSetAsync(cacheKey, output, _cacheDuration);
-            return output;
+            try
+            {
+                cachedResponse = await _redis.StringGetAsync(cacheKey);
+                if (!cachedResponse.IsNull)
+                    return cachedResponse.ToString();
+
+                var output = await _commandFactory.Create(_settings.SkopeoCommand)
+                    .WithArguments(a => a
+                        .AddRange(_settings.SkopeoArguments)
+                        .Add(operation)
+                        .Add($"docker://{image}"))
+                    .ExecuteAndCaptureStdoutAsync(cancellationToken);
+
+                await _redis.StringSetAsync(cacheKey, output, _cacheDuration);
+                return output;
+            }
+            finally
+            {
+                semaphore.Release();
+                // clean up semaphore list
+                lock (_semaphoreLock)
+                {
+                    if (semaphore.CurrentCount == 1)
+                    {
+                        _semaphores.Remove(cacheKey);
+                    }
+                }
+            }
         }
-
     }
 }

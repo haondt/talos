@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using StackExchange.Redis;
@@ -14,6 +14,7 @@ namespace Talos.Renovate.Extensions
         {
             services.AddSingleton<ISkopeoService, SkopeoService>();
             services.AddSingleton<IImageUpdaterService, ImageUpdaterService>();
+            services.AddSingleton<IDockerComposeFileService, DockerComposeFileService>();
             services.Configure<ImageUpdateSettings>(configuration.GetSection(nameof(ImageUpdateSettings)));
             ImageUpdateSettings.Validate(services.AddOptions<ImageUpdateSettings>()).ValidateOnStart();
             services.Configure<RedisSettings>(configuration.GetSection(nameof(RedisSettings)));
@@ -25,6 +26,10 @@ namespace Talos.Renovate.Extensions
                 var cm = ConnectionMultiplexer.Connect(redisSettings.Value.Endpoint);
                 return new RedisProvider(cm);
             });
+
+            services.AddSingleton<IGitHostServiceProvider, GitHostServiceProvider>();
+
+            services.AddHttpClient<IGitHostService, GitLabService>();
 
             return services;
         }

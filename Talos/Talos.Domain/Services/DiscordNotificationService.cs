@@ -1,13 +1,13 @@
 ﻿using Talos.Renovate.Abstractions;
 using Talos.Renovate.Models;
 
-namespace Talos.Renovate.Tests.Fakes
+namespace Talos.Domain.Services
 {
-    internal class FakeNotificationService : INotificationService
+    public class DiscordNotificationService : INotificationService
     {
-        public Task<string> CreateInteraction(ImageUpdate update)
+        public async Task<string> CreateInteraction(ImageUpdate update)
         {
-            return Task.FromResult(Guid.NewGuid().ToString());
+            return Guid.NewGuid().ToString();
         }
 
         public Task DeleteInteraction(string id)
@@ -19,5 +19,6 @@ namespace Talos.Renovate.Tests.Fakes
         {
             return Task.CompletedTask;
         }
+
     }
 }

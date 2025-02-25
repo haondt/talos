@@ -1,6 +1,8 @@
-﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Serilog;
+using Serilog.Formatting.Compact;
 using Talos.Discord.Extensions;
 using Talos.Docker.Extensions;
 using Talos.Domain.Extensions;
@@ -26,8 +28,16 @@ using var host = Host.CreateDefaultBuilder()
     .ConfigureLogging(logging =>
     {
         logging.ClearProviders();
-        logging.AddConsole();
+        logging.AddSerilog();
     })
+    .UseSerilog((context, services, configuration) => configuration
+        .ReadFrom.Configuration(context.Configuration)
+        .Enrich.FromLogContext()
+        .MinimumLevel.Information()
+        .WriteTo.Console(new CompactJsonFormatter())
+        .WriteTo.Conditional(
+            evt => context.HostingEnvironment.IsDevelopment(),
+            wt => wt.Seq("http://localhost:5341/")))
     .Build();
 
 await host.RunAsync();

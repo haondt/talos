@@ -114,7 +114,7 @@ namespace Talos.Renovate.Models
 
     }
 
-    public readonly record struct ParsedImage(
+    public record ParsedImage(
         string Name,
         string Untagged,
         Optional<string> Domain = default,
@@ -149,7 +149,7 @@ namespace Talos.Renovate.Models
             return sb.ToString();
         }
     }
-    public readonly record struct ParsedTag(
+    public record ParsedTag(
         Union<SemanticVersion, string> Version,
         Optional<string> Variant = default)
     {

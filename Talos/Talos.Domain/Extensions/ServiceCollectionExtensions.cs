@@ -5,6 +5,7 @@ using Talos.Discord.Models;
 using Talos.Domain.Abstractions;
 using Talos.Domain.Commands;
 using Talos.Domain.Services;
+using Talos.Renovate.Abstractions;
 
 namespace Talos.Domain.Extensions
 {
@@ -17,6 +18,7 @@ namespace Talos.Domain.Extensions
 
             services.RegisterInteraction<TalosCommandGroup>();
             services.AddSingleton<IDiscordCommandProcessRegistry, DiscordCommandProcessRegistry>();
+            services.AddSingleton<INotificationService, DiscordNotificationService>();
             return services;
         }
     }

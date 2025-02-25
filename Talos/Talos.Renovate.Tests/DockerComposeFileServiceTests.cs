@@ -1,0 +1,426 @@
+﻿using FluentAssertions;
+using Talos.Renovate.Services;
+using Talos.Renovate.Tests.Fakes;
+
+namespace Talos.Renovate.Tests
+{
+    public class DockerComposeFileTests
+    {
+        private DockerComposeFileService GetSut()
+        {
+            return new DockerComposeFileService(new FakeLogger<DockerComposeFileService>());
+        }
+
+        [Fact]
+        public void WillNotMessWithOtherYamlData()
+        {
+            var originalYaml = @"version: '3'
+# test
+x-custom:
+  - foo:
+
+    - bar:
+      - baz:
+    - bar:
+      - baz:
+
+      - qux:
+      - foo:
+services:
+  other_app:
+    image: other_image
+  app:
+    networks:
+      net1:
+    image: oldimage:oldtag
+    volumes:
+      - ./foo/bar:/baz/qux
+      - some:/thing
+  # deploy:
+  #   replicas: 2
+    environment:
+      FOO_BAR: 100
+      BAZ_QUX: ""100""
+      QUUX: '1001'
+      CORGE: abcdef
+      GRAULT: true
+      GARPLY: false
+      WALDO: yes
+      FRED: no
+      PLUGH: 1
+      XYZZY: 0
+      THUD:
+      THUD_v2: null
+      
+  other-app-2:
+    image: &xyz other-image-2:latest@sha256:000
+  other-app-3:
+    image: *xyz
+  other_app_4:
+    image: other_image
+
+networks:
+  net1:
+volumes:
+  vol1:
+  vol2:
+";
+            var expectedYaml = @"version: '3'
+# test
+x-custom:
+  - foo:
+
+    - bar:
+      - baz:
+    - bar:
+      - baz:
+
+      - qux:
+      - foo:
+services:
+  other_app:
+    image: other_image
+  app:
+    networks:
+      net1:
+    image: newimage:newtag
+    volumes:
+      - ./foo/bar:/baz/qux
+      - some:/thing
+  # deploy:
+  #   replicas: 2
+    environment:
+      FOO_BAR: 100
+      BAZ_QUX: ""100""
+      QUUX: '1001'
+      CORGE: abcdef
+      GRAULT: true
+      GARPLY: false
+      WALDO: yes
+      FRED: no
+      PLUGH: 1
+      XYZZY: 0
+      THUD:
+      THUD_v2: null
+      
+  other-app-2:
+    image: &xyz other-image-2:latest@sha256:000
+  other-app-3:
+    image: *xyz
+  other_app_4:
+    image: other_image
+
+networks:
+  net1:
+volumes:
+  vol1:
+  vol2:
+";
+            var outputYaml = GetSut().SetServiceImage(originalYaml, "app", "newimage:newtag");
+            outputYaml.Should().Be(expectedYaml);
+        }
+
+        [Fact]
+        public void WithThrowOnMissingServices()
+        {
+            var originalYaml = @"services:
+  app:
+    image: oldimage:oldtag
+";
+
+            0.Invoking(_ => GetSut().SetServiceImage(originalYaml, "nonexistent", "newimage:newtag"))
+                .Should().Throw<ArgumentException>();
+        }
+
+        [Fact]
+        public void WillThrowOnAnchors()
+        {
+            var originalYaml = @"services:
+  app:
+    image: &foo oldimage:oldtag
+";
+
+            0.Invoking(_ => GetSut().SetServiceImage(originalYaml, "app", "newimage:newtag"))
+                .Should().Throw<ArgumentException>();
+        }
+        [Fact]
+        public void WillThrowOnAnchorRefs()
+        {
+            var originalYaml = @"services:
+  app:
+    image: *foo
+";
+
+            0.Invoking(_ => GetSut().SetServiceImage(originalYaml, "app", "newimage:newtag"))
+                .Should().Throw<ArgumentException>();
+        }
+
+        [Fact]
+        public void WillIgnoreOtherTopLevelKeys()
+        {
+            var originalYaml = @"x-other-thing:
+  app:
+    image: foo
+services:
+  foo:
+    image: foo
+x-yet-another-thing:
+  app:
+    image: foo
+";
+            0.Invoking(_ => GetSut().SetServiceImage(originalYaml, "app", "bar"))
+                .Should().Throw<ArgumentException>();
+
+        }
+
+        [Fact]
+        public void WillIgnoreOtherServices()
+        {
+            var originalYaml = @"services:
+  app2:
+    image: foo
+  app:
+    image: foo
+  app3:
+    image: foo
+";
+            var expectedYaml = @"services:
+  app2:
+    image: foo
+  app:
+    image: bar
+  app3:
+    image: foo
+";
+            var outputYaml = GetSut().SetServiceImage(originalYaml, "app", "bar");
+            outputYaml.Should().Be(expectedYaml);
+        }
+
+        [Fact]
+        public void WillRespectKeyHierarchy()
+        {
+            var originalYaml = @"services:
+  app:
+    build:
+      context: .
+x-other:
+  app:
+    image: foo
+";
+            0.Invoking(_ => GetSut().SetServiceImage(originalYaml, "app", "bar"))
+                .Should().Throw<ArgumentException>();
+        }
+
+        [Fact]
+        public void WillIgnoreComments()
+        {
+            var originalYaml = @"services:
+  # app:
+  #  build:
+  #    context: .
+#x-other:
+  app:
+    image: foo
+";
+            var expectedYaml = @"services:
+  # app:
+  #  build:
+  #    context: .
+#x-other:
+  app:
+    image: bar
+";
+            var outputYaml = GetSut().SetServiceImage(originalYaml, "app", "bar");
+            outputYaml.Should().Be(expectedYaml);
+        }
+
+        [Theory]
+        [InlineData("*foo", false)]
+        [InlineData(" *foo", false)]
+        [InlineData("  *foo", false)]
+        [InlineData("* foo", false)]
+        [InlineData(" * foo", false)]
+        [InlineData("  * foo", false)]
+        [InlineData("&foo", false)]
+        [InlineData(" &foo", false)]
+        [InlineData("  &foo", false)]
+        [InlineData("& foo", false)]
+        [InlineData(" & foo", false)]
+        [InlineData("  & foo", false)]
+        [InlineData("#foo", false)]
+        [InlineData(" #foo", false)]
+        [InlineData("  #foo", false)]
+        [InlineData("# foo", false)]
+        [InlineData(" # foo", false)]
+        [InlineData("  # foo", false)]
+        [InlineData("foo", true)]
+        [InlineData(" foo", true)]
+        [InlineData("  foo", true)]
+        [InlineData("*foo baz", false)]
+        [InlineData(" *foo baz", false)]
+        [InlineData("  *foo baz", false)]
+        [InlineData("* foo baz", false)]
+        [InlineData(" * foo baz", false)]
+        [InlineData("  * foo baz", false)]
+        [InlineData("&foo baz", false)]
+        [InlineData(" &foo baz", false)]
+        [InlineData("  &foo baz", false)]
+        [InlineData("& foo baz", false)]
+        [InlineData(" & foo baz", false)]
+        [InlineData("  & foo baz", false)]
+        [InlineData("#foo baz", false)]
+        [InlineData(" #foo baz", false)]
+        [InlineData("  #foo baz", false)]
+        [InlineData("# foo baz", false)]
+        [InlineData(" # foo baz", false)]
+        [InlineData("  # foo baz", false)]
+        [InlineData("foo baz", false)]
+        [InlineData(" foo baz", false)]
+        [InlineData("  foo baz", false)]
+        public void WillCorrectlyFilterValidImageKeys(string originalTag, bool shouldSucceed)
+        {
+            var originalYaml = $@"services:
+  app:
+    image:{originalTag}
+";
+            var expectedYaml = @"services:
+  app:
+    image: bar
+";
+            if (shouldSucceed)
+            {
+
+                var outputYaml = GetSut().SetServiceImage(originalYaml, "app", "bar");
+                outputYaml.Should().Be(expectedYaml);
+            }
+            else
+            {
+                0.Invoking(_ => GetSut().SetServiceImage(originalYaml, "app", "bar"))
+                    .Should().Throw<ArgumentException>();
+            }
+        }
+
+        [Fact]
+        public void WillUpdateImageCorrectly()
+        {
+            var originalYaml = @"
+
+
+
+services:
+  elysium-stage:
+    networks:
+      - nginx
+      - elysium-stage
+    image: registry.gitlab.com/haondt/cicd/registry/elysium:0.0.5
+    depends_on:
+      - elysium-stage-silo
+    environment:
+      VIRTUAL_HOST: elysium-stage.haondt.dev
+      VIRTUAL_PORT: 8080
+    env_file:
+      - ./elysium-stage/elysium.env
+      - ./elysium-stage/shared.env
+  elysium-stage-silo:
+    networks:
+      - nginx
+      - elysium-stage
+    image: registry.gitlab.com/haondt/cicd/registry/elysium-silo:0.0.5
+    depends_on:
+      - elysium-stage-postgres
+      - elysium-stage-redis
+    environment:
+      VIRTUAL_HOST: elysium-stage-silo.chert
+      VIRTUAL_PORT: 8080
+    env_file:
+      - ./elysium-stage/shared.env
+    # deploy:
+    #   replicas: 2
+  elysium-stage-postgres:
+    networks:
+      - elysium-stage
+      - wireguard
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ""{{ elysium__stage__postgres__user }}""
+      POSTGRES_PASSWORD: ""{{ elysium__stage__postgres__password }}""
+      PGDATA: /data/pgdata
+    volumes:
+      - elysium-postgres-data:/data
+      - ./elysium-stage/postgresql-init.sql:/docker-entrypoint-initdb.d/postgresql-init.sql
+  elysium-stage-redis:
+    image: redis
+    networks:
+      - elysium-stage
+
+networks:
+  elysium-stage:
+
+volumes:
+  elysium-postgres-data:
+
+";
+            var expectedYaml = @"
+
+
+
+services:
+  elysium-stage:
+    networks:
+      - nginx
+      - elysium-stage
+    image: registry.gitlab.com/haondt/cicd/registry/elysium:0.1.0@sha256:ab42ae6871d9a12b90c7a259f808aade4d84496317a7e38621d7ebca07fc02f6
+    depends_on:
+      - elysium-stage-silo
+    environment:
+      VIRTUAL_HOST: elysium-stage.haondt.dev
+      VIRTUAL_PORT: 8080
+    env_file:
+      - ./elysium-stage/elysium.env
+      - ./elysium-stage/shared.env
+  elysium-stage-silo:
+    networks:
+      - nginx
+      - elysium-stage
+    image: registry.gitlab.com/haondt/cicd/registry/elysium-silo:0.1.0@sha256:ab42ae6871d9a12b90c7a259f808aade4d84496317a7e38621d7ebca07fc02f6
+    depends_on:
+      - elysium-stage-postgres
+      - elysium-stage-redis
+    environment:
+      VIRTUAL_HOST: elysium-stage-silo.chert
+      VIRTUAL_PORT: 8080
+    env_file:
+      - ./elysium-stage/shared.env
+    # deploy:
+    #   replicas: 2
+  elysium-stage-postgres:
+    networks:
+      - elysium-stage
+      - wireguard
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ""{{ elysium__stage__postgres__user }}""
+      POSTGRES_PASSWORD: ""{{ elysium__stage__postgres__password }}""
+      PGDATA: /data/pgdata
+    volumes:
+      - elysium-postgres-data:/data
+      - ./elysium-stage/postgresql-init.sql:/docker-entrypoint-initdb.d/postgresql-init.sql
+  elysium-stage-redis:
+    image: redis
+    networks:
+      - elysium-stage
+
+networks:
+  elysium-stage:
+
+volumes:
+  elysium-postgres-data:
+
+";
+
+            var outputYaml = GetSut().SetServiceImage(originalYaml, "elysium-stage", "registry.gitlab.com/haondt/cicd/registry/elysium:0.1.0@sha256:ab42ae6871d9a12b90c7a259f808aade4d84496317a7e38621d7ebca07fc02f6");
+            outputYaml = GetSut().SetServiceImage(outputYaml, "elysium-stage-silo", "registry.gitlab.com/haondt/cicd/registry/elysium-silo:0.1.0@sha256:ab42ae6871d9a12b90c7a259f808aade4d84496317a7e38621d7ebca07fc02f6");
+            outputYaml.Should().Be(expectedYaml);
+        }
+    }
+}

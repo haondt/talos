@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using Haondt.Core.Converters;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
@@ -26,6 +27,8 @@ namespace Talos.Renovate.Models
                     ProcessDictionaryKeys = false,
                 }
             };
+            SerializerSettings.Converters.Add(new AbsoluteDateTimeJsonConverter());
+
 
             SkopeoSerializerSettings = new JsonSerializerSettings();
             SkopeoSerializerSettings.TypeNameHandling = TypeNameHandling.None;
@@ -38,6 +41,7 @@ namespace Talos.Renovate.Models
                 .WithNamingConvention(HyphenatedNamingConvention.Instance)
                 .IgnoreUnmatchedProperties()
                 .Build();
+
         }
 
     }
