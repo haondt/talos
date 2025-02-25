@@ -2,6 +2,8 @@
 using Haondt.Core.Models;
 using Talos.Docker.Abstractions;
 using Talos.Docker.Models;
+using Talos.Integration.Command.Abstractions;
+using Talos.Integration.Command.Services;
 
 namespace Talos.Docker.Services
 {
@@ -47,6 +49,7 @@ namespace Talos.Docker.Services
 
             return result.Trim();
         }
+
         public async Task<string> GetContainerImageNameAsync(string container, CancellationToken? cancellationToken = null)
         {
             var result = await PrepareDockerCommand(ab => ab
@@ -57,6 +60,7 @@ namespace Talos.Docker.Services
                 .ExecuteAndCaptureStdoutAsync(cancellationToken);
             return result.Trim();
         }
+
         public async Task<string> GetContainerImageDigestAsync(string container, CancellationToken? cancellationToken = null)
         {
             var result = await PrepareDockerCommand(ab => ab

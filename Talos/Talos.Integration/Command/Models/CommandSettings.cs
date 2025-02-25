@@ -1,4 +1,4 @@
-﻿namespace Talos.Docker.Models
+﻿namespace Talos.Integration.Command.Models
 {
     public class CommandSettings
     {

@@ -1,0 +1,7 @@
+services:
+  talos:
+    image: talos
+    environment:
+      GITLAB_PERSONAL_ACCESS_TOKEN: mytoken
+      ImageUpdateSettings__Hosts__haondt-gitlab__Token: $GITLAB_PERSONAL_ACCESS_TOKEN
+      ImageUpdateSettings__Hosts__haondt-gitlab__Type: GitLab

@@ -1,6 +1,6 @@
-﻿using Talos.Docker.Services;
+﻿using Talos.Integration.Command.Services;
 
-namespace Talos.Docker.Abstractions
+namespace Talos.Integration.Command.Abstractions
 {
     public interface ICommandFactory
     {

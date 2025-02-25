@@ -7,7 +7,22 @@ namespace Talos.Core.Extensions
     public static class OptionalExtensions
     {
 
-        public static bool Test<T>(this Optional<T> optional, [MaybeNullWhen(false)] out T value) where T : notnull
+        public static bool Test<T>(this Optional<T> optional, out Optional<T> successOptional) where T : notnull
+        {
+            successOptional = optional;
+            return optional.HasValue;
+        }
+
+        public static bool IsEquivalentTo<T>(this Optional<T> optional, Optional<T> other) where T : notnull
+        {
+            if (optional.HasValue != other.HasValue)
+                return false;
+            if (!optional.HasValue)
+                return true;
+            return optional.Value.Equals(other.Value);
+        }
+
+        public static bool TryGetValue<T>(this Optional<T> optional, [MaybeNullWhen(false)] out T value) where T : notnull
         {
             if (optional.HasValue)
             {

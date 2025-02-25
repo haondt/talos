@@ -1,0 +1,6 @@
+services:
+  talos-redis:
+    container_name: talos-redis
+    ports:
+      - 6379:6379
+    image: redis

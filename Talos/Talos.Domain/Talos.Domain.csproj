@@ -9,6 +9,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Talos.Discord\Talos.Discord.csproj" />
     <ProjectReference Include="..\Talos.Docker\Talos.Docker.csproj" />
+    <ProjectReference Include="..\Talos.Renovate\Talos.Renovate.csproj" />
   </ItemGroup>
 
   <ItemGroup>

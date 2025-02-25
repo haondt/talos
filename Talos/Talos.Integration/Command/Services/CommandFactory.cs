@@ -1,9 +1,9 @@
 ﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Talos.Docker.Abstractions;
-using Talos.Docker.Models;
+using Talos.Integration.Command.Abstractions;
+using Talos.Integration.Command.Models;
 
-namespace Talos.Docker.Services
+namespace Talos.Integration.Command.Services
 {
     public class CommandFactory(
         IOptions<CommandSettings> options,

@@ -4,6 +4,8 @@ using Microsoft.Extensions.Logging;
 using Talos.Discord.Extensions;
 using Talos.Docker.Extensions;
 using Talos.Domain.Extensions;
+using Talos.Integration.Command.Extensions;
+using Talos.Renovate.Extensions;
 
 using var host = Host.CreateDefaultBuilder()
     .ConfigureAppConfiguration((context, config) =>
@@ -17,6 +19,8 @@ using var host = Host.CreateDefaultBuilder()
     {
         services.AddTalosDiscordServices(context.Configuration);
         services.AddTalosDockerServices(context.Configuration);
+        services.AddTalosRenovateServices(context.Configuration);
+        services.AddTalosCommandServices(context.Configuration);
         services.AddTalosServices(context.Configuration);
     })
     .ConfigureLogging(logging =>

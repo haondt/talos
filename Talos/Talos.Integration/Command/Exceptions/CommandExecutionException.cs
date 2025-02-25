@@ -1,7 +1,7 @@
 ﻿using System.Text;
-using Talos.Docker.Models;
+using Talos.Integration.Command.Models;
 
-namespace Talos.Docker.Exceptions
+namespace Talos.Integration.Command.Exceptions
 {
     public class CommandExecutionException : Exception
     {
@@ -25,6 +25,8 @@ namespace Talos.Docker.Exceptions
                 sb.AppendLine($"Exit code: {result.ExitCode.Value}");
             if (result.StdErr.HasValue)
                 sb.AppendLine($"StdErr: {result.StdErr.Value}");
+            if (result.StdOut.HasValue)
+                sb.AppendLine($"StdOut: {result.StdOut.Value}");
 
             return sb.ToString();
         }

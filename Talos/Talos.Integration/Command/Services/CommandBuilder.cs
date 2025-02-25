@@ -1,18 +1,19 @@
 ﻿using CliWrap;
 using CliWrap.Builders;
-using CliWrap.Exceptions;
 using Haondt.Core.Extensions;
 using Haondt.Core.Models;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Diagnostics.Contracts;
 using System.Text;
-using Talos.Docker.Models;
+using Talos.Integration.Command.Models;
+using CommandExecutionException = Talos.Integration.Command.Exceptions.CommandExecutionException;
+using CommandResult = Talos.Integration.Command.Models.CommandResult;
 
-namespace Talos.Docker.Services
+namespace Talos.Integration.Command.Services
 {
     public record CommandBuilder(
-        Command Command,
+        CliWrap.Command Command,
         CommandOptions Options,
         CommandSettings Settings,
         ILogger<CommandBuilder> Logger)
@@ -69,18 +70,17 @@ namespace Talos.Docker.Services
 
         public async Task<string> ExecuteAndCaptureStdoutAsync(CancellationToken? cancellationToken = null)
         {
-            var sb = new StringBuilder();
-            var inner = this with
-            {
-                Command = Command
-                    .WithStandardOutputPipe(PipeTarget.ToStringBuilder(sb))
-            };
-
-            await inner.ExecuteAsync(cancellationToken);
-            return sb.ToString();
+            var result = await ExecuteAsync(captureStdOut: true, cancellationToken: cancellationToken);
+            return result.StdOut.Or("");
         }
 
-        public async Task<Models.CommandResult> ExecuteAsync(CancellationToken? cancellationToken = null)
+        public async Task<string> ExecuteAndCaptureStdoutAsync(PipeTarget target, CancellationToken? cancellationToken = null)
+        {
+            var result = await ExecuteAsync(target, cancellationToken: cancellationToken);
+            return result.StdOut.Or("");
+        }
+
+        public async Task<CommandResult> ExecuteAsync(PipeTarget? pipeStdOut = null, bool captureStdOut = false, CancellationToken? cancellationToken = null)
         {
             var maskedCommand = Options.SensitiveDataToMask.As(q => MaskSensitiveData(Options.Command, q)).Or(Options.Command);
             var maskedArguments = Options.SensitiveDataToMask.As(q => MaskSensitiveData(Command.Arguments, q)).Or(Command.Arguments);
@@ -89,43 +89,32 @@ namespace Talos.Docker.Services
                 maskedCommand, maskedArguments);
             try
             {
-                var result = await InternalExecuteAsync(cancellationToken);
+                var result = await InternalExecuteAsync(pipeStdOut, captureStdOut, cancellationToken);
                 Logger.LogInformation("Completed command: {command} {arguments} in {result}",
                     maskedCommand, maskedArguments, result.Duration);
 
                 return result;
             }
-            catch (Exceptions.CommandExecutionException ex)
+            catch (CommandExecutionException ex)
             {
                 if (ex.Result.WasTimedOut)
-                {
                     Logger.LogWarning("Command {command} {arguments} timed out after {duration}",
                         maskedCommand, maskedArguments, ex.Result.Duration);
-                }
                 else if (ex.Result.WasKilled)
-                {
                     Logger.LogWarning("Command {command} {arguments} was killed after {duration}",
                         maskedCommand, maskedArguments, ex.Result.Duration);
-                }
                 else
-                {
                     if (ex.Result.ExitCode.HasValue)
-                    {
-                        Logger.LogError("Command {command} {arguments} failed with exit code {exitCode}.",
-                            maskedCommand, maskedArguments, ex.Result.ExitCode.Value);
-                    }
-                    else
-                    {
-                        Logger.LogError("Command {command} {arguments} failed with no exit code.",
-                            maskedCommand, maskedArguments);
-                    }
-                }
-
+                    Logger.LogError("Command {command} {arguments} failed with exit code {exitCode}.",
+                        maskedCommand, maskedArguments, ex.Result.ExitCode.Value);
+                else
+                    Logger.LogError("Command {command} {arguments} failed with no exit code.",
+                        maskedCommand, maskedArguments);
                 throw;
             }
         }
 
-        private async Task<Models.CommandResult> InternalExecuteAsync(CancellationToken? cancellationToken = null)
+        private async Task<CommandResult> InternalExecuteAsync(PipeTarget? pipeStdOut = null, bool captureStdOut = false, CancellationToken? cancellationToken = null)
         {
             var stopwatch = Stopwatch.StartNew();
 
@@ -155,8 +144,19 @@ namespace Talos.Docker.Services
 
             var result = new Optional<CliWrap.CommandResult>();
             var stdErrSb = new StringBuilder();
+            var stdOutSb = new Optional<StringBuilder>();
 
             var command = Command.WithStandardErrorPipe(PipeTarget.ToStringBuilder(stdErrSb));
+            if (captureStdOut)
+            {
+                stdOutSb = new StringBuilder();
+                if (pipeStdOut != null)
+                    command = Command.WithStandardOutputPipe(PipeTarget.Merge(pipeStdOut, PipeTarget.ToStringBuilder(stdOutSb.Value)));
+                command = Command.WithStandardOutputPipe(PipeTarget.ToStringBuilder(stdOutSb.Value));
+            }
+            else if (pipeStdOut != null)
+                command = Command.WithStandardOutputPipe(pipeStdOut);
+
             try
             {
                 if (interruptCts.HasValue)
@@ -167,9 +167,7 @@ namespace Talos.Docker.Services
                     result = await command.ExecuteAsync(killCts.Value.Token, interruptCts.Value.Token);
                 }
                 else
-                {
                     result = await command.ExecuteAsync();
-                }
             }
             catch (OperationCanceledException ex)
             {
@@ -181,7 +179,15 @@ namespace Talos.Docker.Services
                 var maskedCommand = Options.SensitiveDataToMask.As(q => MaskSensitiveData(Options.Command, q)).Or(Options.Command);
                 var maskedArguments = Options.SensitiveDataToMask.As(q => MaskSensitiveData(command.Arguments, q)).Or(command.Arguments);
                 var maskedErrorMessage = Options.SensitiveDataToMask.As(q => MaskSensitiveData(stdErrSb.ToString(), q)).Or(stdErrSb.ToString());
-                throw new Talos.Docker.Exceptions.CommandExecutionException(new()
+                var maskedStdOut = new Optional<string>();
+                if (stdOutSb.HasValue)
+                {
+                    if (Options.SensitiveDataToMask.HasValue)
+                        maskedStdOut = MaskSensitiveData(stdOutSb.Value.ToString(), Options.SensitiveDataToMask.Value);
+                    else
+                        maskedStdOut = stdOutSb.Value.ToString();
+                }
+                throw new CommandExecutionException(new()
                 {
                     Command = maskedCommand,
                     Arguments = maskedArguments,
@@ -189,17 +195,26 @@ namespace Talos.Docker.Services
                     WasTimedOut = wasTimedOut,
                     WasKilled = wasKilled,
                     WasCancelled = wasCancelled,
-                    StdErr = maskedErrorMessage
+                    StdErr = maskedErrorMessage,
+                    StdOut = maskedStdOut
                 }, ex);
 
             }
-            catch (CommandExecutionException ex)
+            catch (CliWrap.Exceptions.CommandExecutionException ex)
             {
                 stopwatch.Stop();
                 var maskedCommand = Options.SensitiveDataToMask.As(q => MaskSensitiveData(Options.Command, q)).Or(Options.Command);
                 var maskedArguments = Options.SensitiveDataToMask.As(q => MaskSensitiveData(command.Arguments, q)).Or(command.Arguments);
                 var maskedErrorMessage = Options.SensitiveDataToMask.As(q => MaskSensitiveData(stdErrSb.ToString(), q)).Or(stdErrSb.ToString());
-                throw new Talos.Docker.Exceptions.CommandExecutionException(new()
+                var maskedStdOut = new Optional<string>();
+                if (stdOutSb.HasValue)
+                {
+                    if (Options.SensitiveDataToMask.HasValue)
+                        maskedStdOut = MaskSensitiveData(stdOutSb.Value.ToString(), Options.SensitiveDataToMask.Value);
+                    else
+                        maskedStdOut = stdOutSb.Value.ToString();
+                }
+                throw new CommandExecutionException(new()
                 {
                     Command = maskedCommand,
                     Arguments = maskedArguments,
@@ -208,7 +223,8 @@ namespace Talos.Docker.Services
                     WasKilled = false,
                     WasCancelled = false,
                     ExitCode = ex.ExitCode,
-                    StdErr = maskedErrorMessage
+                    StdErr = maskedErrorMessage,
+                    StdOut = maskedStdOut
                 }, ex);
             }
             finally
@@ -222,11 +238,12 @@ namespace Talos.Docker.Services
             }
 
             stopwatch.Stop();
-            return new Models.CommandResult
+            return new CommandResult
             {
                 Arguments = Command.Arguments,
                 Command = Options.Command,
-                Duration = stopwatch.Elapsed
+                Duration = stopwatch.Elapsed,
+                StdOut = stdOutSb.As(sb => sb.ToString())
             };
         }
 

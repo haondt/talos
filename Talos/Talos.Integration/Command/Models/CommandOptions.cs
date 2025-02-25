@@ -1,6 +1,6 @@
 ﻿using Haondt.Core.Models;
 
-namespace Talos.Docker.Models
+namespace Talos.Integration.Command.Models
 {
     public struct CommandOptions
     {

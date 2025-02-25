@@ -10,8 +10,6 @@ namespace Talos.Docker.Extensions
     {
         public static IServiceCollection AddTalosDockerServices(this IServiceCollection services, IConfiguration configuration)
         {
-            services.AddSingleton<ICommandFactory, CommandFactory>();
-            services.Configure<CommandSettings>(configuration.GetSection(nameof(CommandSettings)));
             services.AddSingleton<IDockerClientFactory, DockerClientFactory>();
             services.Configure<DockerSettings>(configuration.GetSection(nameof(DockerSettings)));
             return services;
