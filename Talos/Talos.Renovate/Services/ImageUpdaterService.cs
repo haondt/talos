@@ -1,8 +1,10 @@
+using Haondt.Core.Extensions;
 using Haondt.Core.Models;
-using LibGit2Sharp;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using StackExchange.Redis;
+using System.Text.RegularExpressions;
+using Talos.Integration.Command.Exceptions;
 using Talos.Renovate.Abstractions;
 using Talos.Renovate.Models;
 
@@ -16,7 +18,8 @@ namespace Talos.Renovate.Services
         ISkopeoService _skopeoService,
         IRedisProvider redisProvider,
         IGitHostServiceProvider gitHostServiceProvider,
-        IDockerComposeFileService _dockerComposeFileService) : IImageUpdaterService
+        IDockerComposeFileService _dockerComposeFileService,
+        IGitServiceFactory _gitServiceFactory) : IImageUpdaterService
     {
         private int _isRunning = 0;
 
@@ -27,8 +30,10 @@ namespace Talos.Renovate.Services
 
         }
 
+        private const string UPDATES_BRANCH_NAME_PREFIX = "talos/updates";
         private readonly ImageUpdateSettings _updateSettings = updateOptions.Value;
         private readonly IDatabase _redis = redisProvider.GetDatabase(options.Value.RedisDatabase);
+        public static string GetUpdatesBranchName(string targetBranchName) => $"{UPDATES_BRANCH_NAME_PREFIX}-{targetBranchName}";
         public async Task RunAsync(CancellationToken? cancellationToken = null)
         {
             if (Interlocked.CompareExchange(ref _isRunning, 1, 0) != 0)
@@ -70,7 +75,8 @@ namespace Talos.Renovate.Services
 
         private async Task RunAsync(HostConfiguration host, RepositoryConfiguration repositoryConfiguration, CancellationToken? cancellationToken = null)
         {
-            using var repoDir = CloneRepository(host, repositoryConfiguration);
+            var git = await _gitServiceFactory.CreateAsync();
+            using var repoDir = await git.CloneAsync(host, repositoryConfiguration);
             var processingTasks = _dockerComposeFileService.ExtractUpdateTargets(repositoryConfiguration, repoDir.Path)
                 .Select(q =>
                 {
@@ -93,10 +99,12 @@ namespace Talos.Renovate.Services
             if (scheduledPushes.Count == 0)
                 return;
 
-            using var repo = new Repository(repoDir.Path);
-            var targetBranchName = repositoryConfiguration.Branch ?? repo.Head.FriendlyName;
+            // this will clone and checkout the target branch if its set, otherwise it will take the default branch
+            var targetBranchName = await git.GetNameOfCurrentBranchAsync(repoDir.Path);
+
+
             if (repositoryConfiguration.CreateMergeRequestsForPushes)
-                CreateAndCheckoutUpdatesBranch(repo, targetBranchName);
+                await git.CreateAndCheckoutBranch(repoDir.Path, GetUpdatesBranchName(targetBranchName));
 
             foreach (var push in scheduledPushes)
             {
@@ -106,14 +114,14 @@ namespace Talos.Renovate.Services
                 File.WriteAllText(filePath, updatedContent);
             }
 
-            CommitAllWithMessage(repo, "updating images");
+            await git.CommitAllWithMessageAsync(repoDir.Path, "updating images");
 
             var gitHost = gitHostServiceProvider.GetGitHost(host);
             if (repositoryConfiguration.CreateMergeRequestsForPushes)
             {
                 var updateBranchName = GetUpdatesBranchName(targetBranchName);
                 _logger.LogInformation("Creating merge request for push. I will use updates branch {Branch} and target branch {Target}", updateBranchName, targetBranchName);
-                ForcePushUpdatesBranch(repo, host, targetBranchName);
+                await git.PushAsync(host, repositoryConfiguration, repoDir.Path, updateBranchName, force: true);
                 if (!await gitHost.HasOpenMergeRequestsForBranch(repositoryConfiguration, updateBranchName, cancellationToken))
                 {
                     _logger.LogInformation("No open merge request(s) for {Branch} found, I will create a new one", updateBranchName);
@@ -128,18 +136,25 @@ namespace Talos.Renovate.Services
             else
             {
                 _logger.LogInformation("Pushing updates to {Branch}", targetBranchName);
-
-                var pushOptions = new PushOptions
-                {
-                    CredentialsProvider = GetCredentialsHandler(host)
-                };
+                var hasUpstream = await git.CheckIfHasUpstreamAsync(repoDir.Path);
                 try
                 {
-                    repo.Network.Push(repo.Head, pushOptions);
+                    await git.PushAsync(host, repositoryConfiguration, repoDir.Path, setUpstream: hasUpstream ? null : "origin");
                 }
-                catch (NonFastForwardException)
+                catch (CommandExecutionException ex) when (Regex.IsMatch(ex.Result.StdErr.Or(""), @".*\[rejected\] +[ \S]*\(fetch first\).*"))
                 {
-                    // TODO
+                    _logger.LogInformation("Received a fetch first error for {Branch}, retrying with a rebase first", targetBranchName);
+                    try
+                    {
+                        await git.PullAsync(repoDir.Path, rebase: true);
+
+                    }
+                    catch (CommandExecutionException ex2) when (Regex.IsMatch(ex2.Result.StdOut.Or(""), @".*\bCONFLICT\b.*\bMerge conflict\b.*"))
+                    {
+                        _logger.LogError("Failed to rebase branch {Branch} due to merge conflict", targetBranchName);
+                        throw;
+                    }
+                    await git.PushAsync(host, repositoryConfiguration, repoDir.Path, setUpstream: hasUpstream ? null : "origin");
                 }
             }
 

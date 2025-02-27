@@ -1,19 +1,15 @@
-using System.Threading.Tasks;
 using Talos.Renovate.Abstractions;
 
 namespace Talos.Renovate.Services
 {
     public class GitServiceFactory(IServiceProvider serviceProvider) : IGitServiceFactory
     {
-        private Task<IGitService>? _gitServiceTask;
+        private Task<IGitService> _gitServiceTask = GitService.CreateAsync(serviceProvider)
+            .ContinueWith(g => (IGitService)g.Result);
 
-        public async Task<IGitService> CreateAsync()
+        public Task<IGitService> CreateAsync()
         {
-            if (_gitServiceTask == null)
-            {
-                _gitServiceTask = GitService.Create(serviceProvider);
-            }
-            return await _gitServiceTask;
+            return _gitServiceTask;
         }
     }
 }

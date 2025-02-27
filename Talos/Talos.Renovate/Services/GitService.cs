@@ -109,10 +109,16 @@ namespace Talos.Renovate.Services
                     .Add("commit")
                     .Add("-am")
                     .Add(message))
-                .ExecuteAsync();
+                .ExecuteAndCaptureStdoutAsync();
         }
 
-        public Task Push(HostConfiguration host, RepositoryConfiguration repository, string repositoryDirectory, bool force = false, string? setUpstream = null)
+        public Task PushAsync(
+            HostConfiguration host,
+            RepositoryConfiguration repository,
+            string repositoryDirectory,
+            string? branchName = null,
+            bool force = false,
+            string? setUpstream = null)
         {
             var (url, sensitiveStrings) = GetAuthenticatedGitUrl(host, repository);
             var command = commandFactory.Create(GIT_BINARY)
@@ -123,12 +129,34 @@ namespace Talos.Renovate.Services
                     .AddIf(!string.IsNullOrEmpty(setUpstream), "-u")
                     .AddIf(!string.IsNullOrEmpty(setUpstream), setUpstream!)
                     .Add(url)
-                    .Add("HEAD"));
+                    .Add(branchName ?? "HEAD"));
 
             foreach (var sensitiveString in sensitiveStrings)
                 command = command.WithSensitiveDataMasked(sensitiveString);
 
             return command.ExecuteAsync();
+        }
+
+        public async Task<bool> CheckIfHasUpstreamAsync(string repositoryDirectory, string? branchName = null)
+        {
+            var result = await commandFactory.Create(GIT_BINARY)
+                .WithWorkingDirectory(repositoryDirectory)
+                .WithArguments(ab => ab
+                    .Add("rev-parse")
+                    .Add("--abbrev-ref")
+                    .Add($"'{branchName ?? "HEAD"}@{{upstream}}'"))
+                .WithAllowedNonZeroExitCode()
+                .ExecuteAsync();
+            return result.ExitCode != 0;
+        }
+        public Task PullAsync(string repositoryDirectory, bool rebase = false)
+        {
+            return commandFactory.Create(GIT_BINARY)
+                .WithWorkingDirectory(repositoryDirectory)
+                .WithArguments(ab => ab
+                    .Add("pull")
+                    .AddIf(rebase, "--rebase"))
+                .ExecuteAndCaptureStdoutAsync();
         }
     }
 }

@@ -6,6 +6,7 @@ namespace Talos.Integration.Command.Models
         string Command,
         string Arguments,
         TimeSpan Duration,
+        int ExitCode,
         Optional<string> StdOut = default)
     {
     }

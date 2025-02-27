@@ -16,7 +16,7 @@ namespace Talos.Integration.Command.Services
         CliWrap.Command Command,
         CommandOptions Options,
         CommandSettings Settings,
-        ILogger<CommandBuilder> Logger)
+        ILogger<CommandBuilder> _logger)
     {
         public static CommandBuilder Wrap(string command, CommandSettings settings, ILogger<CommandBuilder> logger)
         {
@@ -68,6 +68,14 @@ namespace Talos.Integration.Command.Services
             };
         }
 
+        [Pure]
+        public CommandBuilder WithEnvironmentVariables(IReadOnlyDictionary<string, string> vars) => this with { Command = Command.WithEnvironmentVariables(vars!) };
+        [Pure]
+        public CommandBuilder WithWorkingDirectory(string directoryPath) => this with { Command = Command.WithWorkingDirectory(directoryPath) };
+
+        [Pure]
+        public CommandBuilder WithAllowedNonZeroExitCode() => this with { Command = Command.WithValidation(CommandResultValidation.None) };
+
         public async Task<string> ExecuteAndCaptureStdoutAsync(CancellationToken? cancellationToken = null)
         {
             var result = await ExecuteAsync(captureStdOut: true, cancellationToken: cancellationToken);
@@ -85,12 +93,12 @@ namespace Talos.Integration.Command.Services
             var maskedCommand = Options.SensitiveDataToMask.As(q => MaskSensitiveData(Options.Command, q)).Or(Options.Command);
             var maskedArguments = Options.SensitiveDataToMask.As(q => MaskSensitiveData(Command.Arguments, q)).Or(Command.Arguments);
 
-            Logger.LogInformation("Executing command: {Command} {Arguments}",
+            _logger.LogInformation("Executing command: {Command} {Arguments}",
                 maskedCommand, maskedArguments);
             try
             {
                 var result = await InternalExecuteAsync(pipeStdOut, captureStdOut, cancellationToken);
-                Logger.LogInformation("Completed command: {Command} {Arguments} in {Result}",
+                _logger.LogInformation("Completed command: {Command} {Arguments} in {Result}",
                     maskedCommand, maskedArguments, result.Duration);
 
                 return result;
@@ -98,17 +106,17 @@ namespace Talos.Integration.Command.Services
             catch (CommandExecutionException ex)
             {
                 if (ex.Result.WasTimedOut)
-                    Logger.LogWarning("Command {Command} {Arguments} timed out after {Duration}",
+                    _logger.LogWarning("Command {Command} {Arguments} timed out after {Duration}",
                         maskedCommand, maskedArguments, ex.Result.Duration);
                 else if (ex.Result.WasKilled)
-                    Logger.LogWarning("Command {Command} {Arguments} was killed after {Duration}",
+                    _logger.LogWarning("Command {Command} {Arguments} was killed after {Duration}",
                         maskedCommand, maskedArguments, ex.Result.Duration);
                 else
                     if (ex.Result.ExitCode.HasValue)
-                    Logger.LogError("Command {Command} {Arguments} failed with exit code {ExitCode}.",
+                    _logger.LogError("Command {Command} {Arguments} failed with exit code {ExitCode}.",
                         maskedCommand, maskedArguments, ex.Result.ExitCode.Value);
                 else
-                    Logger.LogError("Command {Command} {Arguments} failed with no exit code.",
+                    _logger.LogError("Command {Command} {Arguments} failed with no exit code.",
                         maskedCommand, maskedArguments);
                 throw;
             }
@@ -142,7 +150,7 @@ namespace Talos.Integration.Command.Services
                     interruptCts = timeoutCts;
             }
 
-            var result = new Optional<CliWrap.CommandResult>();
+            CliWrap.CommandResult result;
             var stdErrSb = new StringBuilder();
             var stdOutSb = new Optional<StringBuilder>();
 
@@ -243,7 +251,8 @@ namespace Talos.Integration.Command.Services
                 Arguments = Command.Arguments,
                 Command = Options.Command,
                 Duration = stopwatch.Elapsed,
-                StdOut = stdOutSb.As(sb => sb.ToString())
+                StdOut = stdOutSb.As(sb => sb.ToString()),
+                ExitCode = result.ExitCode
             };
         }
 
