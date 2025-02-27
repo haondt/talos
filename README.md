@@ -8,3 +8,4 @@ Talos wraps a few command line tools that must be installed on the host system:
 - [`skopeo`](https://github.com/containers/skopeo)
 - [`git`](https://git-scm.com/)
 
+
