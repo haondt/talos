@@ -30,7 +30,8 @@ namespace Talos.Renovate.Extensions
             services.AddSingleton<IGitHostServiceProvider, GitHostServiceProvider>();
 
             services.AddHttpClient<IGitHostService, GitLabService>();
-            services.AddSingleton<IGitServiceFactory, GitServiceFactory>();
+            services.AddSingleton<IGitService, GitService>();
+            services.Configure<GitSettings>(configuration.GetSection(nameof(GitSettings)));
 
             return services;
         }

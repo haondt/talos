@@ -1,5 +1,6 @@
-using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Talos.Integration.Command.Abstractions;
+using Talos.Integration.Command.Services;
 using Talos.Renovate.Abstractions;
 using Talos.Renovate.Extensions;
 using Talos.Renovate.Models;
@@ -8,46 +9,48 @@ namespace Talos.Renovate.Services
 {
     public class GitService : IGitService
     {
-        private readonly ICommandFactory commandFactory;
-
-        private const string GIT_USER = "Talos";
-        private const string GIT_EMAIL = "talos@example.com";
+        private readonly ICommandFactory _commandFactory;
+        private readonly GitSettings _gitSettings;
+        private const string DEFAULT_GIT_USER_NAME = "Talos";
+        private const string DEFAULT_GIT_EMAIL = "talos@example.com";
         private const string GIT_BINARY = "git";
 
-        public GitService(ICommandFactory _commandFactory)
+        public GitService(ICommandFactory commandFactory, IOptions<GitSettings> gitSettings)
         {
-            commandFactory = _commandFactory;
+            _commandFactory = commandFactory;
+            _gitSettings = gitSettings.Value;
         }
 
-        public static async Task<GitService> CreateAsync(IServiceProvider serviceProvider)
-        {
-            var git = ActivatorUtilities.CreateInstance<GitService>(serviceProvider);
-            await git.ConfigureGitEnvironmentAsync();
-            return git;
-        }
+        private static string GetUserName(HostConfiguration host) => host.Name ?? DEFAULT_GIT_USER_NAME;
+        private static string GetEmail(HostConfiguration host) => host.Email ?? DEFAULT_GIT_EMAIL;
 
-        private async Task ConfigureGitEnvironmentAsync()
+        private async Task ConfigureGitEnvironmentAsync(HostConfiguration host, string repositoryDirectory)
         {
-            await commandFactory.Create(GIT_BINARY)
-                .WithArguments(ab => ab
-                    .Add("config")
-                    .Add("--global")
-                    .Add("user.email")
-                    .Add(GIT_EMAIL))
-                .ExecuteAsync();
+            var commands = new List<CommandBuilder>
+            {
+                _commandFactory.Create(GIT_BINARY)
+                    .WithArguments(ab => ab
+                        .Add("config")
+                        .Add("user.email")
+                        .Add(GetEmail(host))),
+                _commandFactory.Create(GIT_BINARY)
+                    .WithArguments(ab => ab
+                        .Add("config")
+                        .Add("user.name")
+                        .Add(GetUserName(host)))
+            };
 
-            await commandFactory.Create(GIT_BINARY)
-                .WithArguments(ab => ab
-                    .Add("config")
-                    .Add("--global")
-                    .Add("user.name")
-                    .Add(GIT_USER))
-                .ExecuteAsync();
+            if (!string.IsNullOrEmpty(repositoryDirectory))
+                foreach (var command in commands)
+                    await command.WithWorkingDirectory(repositoryDirectory).ExecuteAsync();
+            else
+                foreach (var command in commands)
+                    await command.ExecuteAsync();
         }
 
         public Task CreateAndCheckoutBranch(string repositoryDirectory, string branchName)
         {
-            return commandFactory.Create(GIT_BINARY)
+            return _commandFactory.Create(GIT_BINARY)
                 .WithWorkingDirectory(repositoryDirectory)
                 .WithArguments(ab => ab
                     .Add("checkout")
@@ -58,7 +61,7 @@ namespace Talos.Renovate.Services
 
         public async Task<string> GetNameOfCurrentBranchAsync(string repositoryDirectory)
         {
-            var result = await commandFactory.Create(GIT_BINARY)
+            var result = await _commandFactory.Create(GIT_BINARY)
                 .WithWorkingDirectory(repositoryDirectory)
                 .WithArguments(ab => ab
                     .Add("rev-parse")
@@ -72,7 +75,7 @@ namespace Talos.Renovate.Services
         {
             var uri = new Uri(repository.Url);
             if (!string.IsNullOrEmpty(host.Token))
-                return ($"{uri.Scheme}://{GIT_USER}:{host.Token}@{uri.Host}:{uri.Port}/{uri.AbsolutePath.TrimStart('/')}".TrimEnd('/'), [host.Token]);
+                return ($"{uri.Scheme}://{GetUserName(host)}:{host.Token}@{uri.Host}:{uri.Port}/{uri.AbsolutePath.TrimStart('/')}".TrimEnd('/'), [host.Token]);
             return ($"{uri.Scheme}://{uri.Host}:{uri.Port}/{uri.AbsolutePath.TrimStart('/')}".TrimEnd('/'), []);
         }
 
@@ -82,7 +85,7 @@ namespace Talos.Renovate.Services
             try
             {
                 var (url, sensitiveStrings) = GetAuthenticatedGitUrl(host, repository);
-                var command = commandFactory.Create(GIT_BINARY)
+                var command = _commandFactory.Create(GIT_BINARY)
                         .WithArguments(ab => ab
                             .Add("clone")
                             .AddIf(!string.IsNullOrEmpty(repository.Branch), "-b")
@@ -92,6 +95,9 @@ namespace Talos.Renovate.Services
                 foreach (var sensitiveString in sensitiveStrings)
                     command = command.WithSensitiveDataMasked(sensitiveString);
                 await command.ExecuteAsync();
+
+                await ConfigureGitEnvironmentAsync(host, repoDir.Path);
+
                 return repoDir;
             }
             catch
@@ -103,7 +109,7 @@ namespace Talos.Renovate.Services
 
         public Task CommitAllWithMessageAsync(string repositoryDirectory, string message)
         {
-            return commandFactory.Create(GIT_BINARY)
+            return _commandFactory.Create(GIT_BINARY)
                 .WithWorkingDirectory(repositoryDirectory)
                 .WithArguments(ab => ab
                     .Add("commit")
@@ -121,7 +127,7 @@ namespace Talos.Renovate.Services
             string? setUpstream = null)
         {
             var (url, sensitiveStrings) = GetAuthenticatedGitUrl(host, repository);
-            var command = commandFactory.Create(GIT_BINARY)
+            var command = _commandFactory.Create(GIT_BINARY)
                 .WithWorkingDirectory(repositoryDirectory)
                 .WithArguments(ab => ab
                     .Add("push")
@@ -139,7 +145,7 @@ namespace Talos.Renovate.Services
 
         public async Task<bool> CheckIfHasUpstreamAsync(string repositoryDirectory, string? branchName = null)
         {
-            var result = await commandFactory.Create(GIT_BINARY)
+            var result = await _commandFactory.Create(GIT_BINARY)
                 .WithWorkingDirectory(repositoryDirectory)
                 .WithArguments(ab => ab
                     .Add("rev-parse")
@@ -151,7 +157,7 @@ namespace Talos.Renovate.Services
         }
         public Task PullAsync(string repositoryDirectory, bool rebase = false)
         {
-            return commandFactory.Create(GIT_BINARY)
+            return _commandFactory.Create(GIT_BINARY)
                 .WithWorkingDirectory(repositoryDirectory)
                 .WithArguments(ab => ab
                     .Add("pull")

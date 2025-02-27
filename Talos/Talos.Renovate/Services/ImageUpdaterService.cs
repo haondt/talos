@@ -19,7 +19,7 @@ namespace Talos.Renovate.Services
         IRedisProvider redisProvider,
         IGitHostServiceProvider gitHostServiceProvider,
         IDockerComposeFileService _dockerComposeFileService,
-        IGitServiceFactory _gitServiceFactory) : IImageUpdaterService
+        IGitService _git) : IImageUpdaterService
     {
         private int _isRunning = 0;
 
@@ -75,8 +75,7 @@ namespace Talos.Renovate.Services
 
         private async Task RunAsync(HostConfiguration host, RepositoryConfiguration repositoryConfiguration, CancellationToken? cancellationToken = null)
         {
-            var git = await _gitServiceFactory.CreateAsync();
-            using var repoDir = await git.CloneAsync(host, repositoryConfiguration);
+            using var repoDir = await _git.CloneAsync(host, repositoryConfiguration);
             var processingTasks = _dockerComposeFileService.ExtractUpdateTargets(repositoryConfiguration, repoDir.Path)
                 .Select(q =>
                 {
@@ -100,11 +99,11 @@ namespace Talos.Renovate.Services
                 return;
 
             // this will clone and checkout the target branch if its set, otherwise it will take the default branch
-            var targetBranchName = await git.GetNameOfCurrentBranchAsync(repoDir.Path);
+            var targetBranchName = await _git.GetNameOfCurrentBranchAsync(repoDir.Path);
 
 
             if (repositoryConfiguration.CreateMergeRequestsForPushes)
-                await git.CreateAndCheckoutBranch(repoDir.Path, GetUpdatesBranchName(targetBranchName));
+                await _git.CreateAndCheckoutBranch(repoDir.Path, GetUpdatesBranchName(targetBranchName));
 
             foreach (var push in scheduledPushes)
             {
@@ -114,14 +113,14 @@ namespace Talos.Renovate.Services
                 File.WriteAllText(filePath, updatedContent);
             }
 
-            await git.CommitAllWithMessageAsync(repoDir.Path, "updating images");
+            await _git.CommitAllWithMessageAsync(repoDir.Path, "updating images");
 
             var gitHost = gitHostServiceProvider.GetGitHost(host);
             if (repositoryConfiguration.CreateMergeRequestsForPushes)
             {
                 var updateBranchName = GetUpdatesBranchName(targetBranchName);
                 _logger.LogInformation("Creating merge request for push. I will use updates branch {Branch} and target branch {Target}", updateBranchName, targetBranchName);
-                await git.PushAsync(host, repositoryConfiguration, repoDir.Path, updateBranchName, force: true);
+                await _git.PushAsync(host, repositoryConfiguration, repoDir.Path, updateBranchName, force: true);
                 if (!await gitHost.HasOpenMergeRequestsForBranch(repositoryConfiguration, updateBranchName, cancellationToken))
                 {
                     _logger.LogInformation("No open merge request(s) for {Branch} found, I will create a new one", updateBranchName);
@@ -136,17 +135,17 @@ namespace Talos.Renovate.Services
             else
             {
                 _logger.LogInformation("Pushing updates to {Branch}", targetBranchName);
-                var hasUpstream = await git.CheckIfHasUpstreamAsync(repoDir.Path);
+                var hasUpstream = await _git.CheckIfHasUpstreamAsync(repoDir.Path);
                 try
                 {
-                    await git.PushAsync(host, repositoryConfiguration, repoDir.Path, setUpstream: hasUpstream ? null : "origin");
+                    await _git.PushAsync(host, repositoryConfiguration, repoDir.Path, setUpstream: hasUpstream ? null : "origin");
                 }
                 catch (CommandExecutionException ex) when (Regex.IsMatch(ex.Result.StdErr.Or(""), @".*\[rejected\] +[ \S]*\(fetch first\).*"))
                 {
                     _logger.LogInformation("Received a fetch first error for {Branch}, retrying with a rebase first", targetBranchName);
                     try
                     {
-                        await git.PullAsync(repoDir.Path, rebase: true);
+                        await _git.PullAsync(repoDir.Path, rebase: true);
 
                     }
                     catch (CommandExecutionException ex2) when (Regex.IsMatch(ex2.Result.StdOut.Or(""), @".*\bCONFLICT\b.*\bMerge conflict\b.*"))
@@ -154,7 +153,7 @@ namespace Talos.Renovate.Services
                         _logger.LogError("Failed to rebase branch {Branch} due to merge conflict", targetBranchName);
                         throw;
                     }
-                    await git.PushAsync(host, repositoryConfiguration, repoDir.Path, setUpstream: hasUpstream ? null : "origin");
+                    await _git.PushAsync(host, repositoryConfiguration, repoDir.Path, setUpstream: hasUpstream ? null : "origin");
                 }
             }
 
