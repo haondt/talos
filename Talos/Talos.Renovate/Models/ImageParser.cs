@@ -2,7 +2,6 @@
 using Haondt.Core.Models;
 using System.Text;
 using System.Text.RegularExpressions;
-using Talos.Core.Extensions;
 
 namespace Talos.Renovate.Models
 {
@@ -14,7 +13,10 @@ namespace Talos.Renovate.Models
 
         private const string TAG_PATTERN = @"(?<versionprefix>v)?(?:(?:(?<major>\d+)(?:\.(?<minor>\d+)(?:\.(?<patch>\d+))?)?)|(?<release>latest|stable))(?:-(?<variant>\w+))?";
 
-        public static Optional<ParsedImage> TryParse(string image)
+        private const string DEFAULT_DOMAIN_NAMESPACE = "library";
+        private const string DEFAULT_DOMAIN = "docker.io";
+
+        public static Optional<ParsedImage> TryParse(string image, bool insertDefaultDomain = false)
         {
             var match = Regex.Match(image, $"^{IMAGE_PATTERN}$");
 
@@ -29,6 +31,13 @@ namespace Talos.Renovate.Models
                 return new();
             if (!untagged.HasValue)
                 return new();
+
+            if (insertDefaultDomain && !domain.HasValue)
+            {
+                domain = DEFAULT_DOMAIN;
+                if (!@namespace.HasValue)
+                    @namespace = DEFAULT_DOMAIN_NAMESPACE;
+            }
 
             var tagAndDigest = TryParseTagAndDigest(match);
 
@@ -93,9 +102,9 @@ namespace Talos.Renovate.Models
 
 
 
-        public static ParsedImage Parse(string image)
+        public static ParsedImage Parse(string image, bool insertDefaultDomain = false)
         {
-            var parsed = TryParse(image);
+            var parsed = TryParse(image, insertDefaultDomain);
             if (parsed.HasValue)
                 return parsed.Value;
             throw new ArgumentException($"Unable to parse image {image}");

@@ -181,7 +181,7 @@ namespace Talos.Renovate.Services
 
         public async Task<Optional<ImageUpdate>> SelectUpdateTarget(string image, BumpSize maxBumpSize)
         {
-            var parsedActiveImage = ImageParser.Parse(image);
+            var parsedActiveImage = ImageParser.Parse(image, true);
             // use untagged version for more cache hits
             var tags = await _skopeoService.ListTags(parsedActiveImage.Untagged);
             var parsedTags = tags.Select(ImageParser.TryParseTag)

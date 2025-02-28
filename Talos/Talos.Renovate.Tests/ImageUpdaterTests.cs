@@ -20,7 +20,7 @@ namespace Talos.Renovate.Tests
             mockRedisProvider.Setup(q => q.GetDatabase(It.IsAny<int>())).Returns(mockRedisDatabase.Object);
             var mockGitHostProvider = new Mock<IGitHostServiceProvider>();
             var mockDockerComposeFileService = new Mock<IDockerComposeFileService>();
-            var mockGitServiceFactory = new Mock<IGitServiceFactory>();
+            var mockGitService = new Mock<IGitService>();
             return new ImageUpdaterService(
                 Options.Create(new Models.ImageUpdateSettings
                 {
@@ -34,7 +34,7 @@ namespace Talos.Renovate.Tests
                 mockRedisProvider.Object,
                 mockGitHostProvider.Object,
                 mockDockerComposeFileService.Object,
-                mockGitServiceFactory.Object);
+                mockGitService.Object);
         }
 
         public static IEnumerable<object[]> GetTestData()

@@ -33,7 +33,7 @@ namespace Talos.Renovate.Tests
         [MemberData(nameof(GetTestData))]
         public void WillParseImages(string stringImage, ParsedImage parsedImage)
         {
-            ImageParser.Parse(stringImage).Should().BeEquivalentTo(parsedImage);
+            ImageParser.Parse(stringImage, false).Should().BeEquivalentTo(parsedImage);
         }
 
         [Theory]
@@ -41,6 +41,19 @@ namespace Talos.Renovate.Tests
         public void WillUnparseImages(string stringImage, ParsedImage parsedImage)
         {
             parsedImage.ToString().Should().Be(stringImage);
+        }
+
+        [Theory]
+        [InlineData("alpine", "docker.io/library/alpine")]
+        [InlineData("library/alpine:latest", "docker.io/library/alpine:latest")]
+        [InlineData("redis", "docker.io/library/redis")]
+        [InlineData("haumea/charon", "docker.io/haumea/charon")]
+        [InlineData("docker.io/haumea/charon", "docker.io/haumea/charon")]
+        [InlineData("lscr.io/linuxserver/wireguard", "lscr.io/linuxserver/wireguard")]
+        [InlineData("my-registry.com/my-image", "my-registry.com/my-image")]
+        public void WillInsertDefaultDomain(string inputImage, string outputImage)
+        {
+            ImageParser.Parse(inputImage, true).ToString().Should().BeEquivalentTo(outputImage);
         }
     }
 }
