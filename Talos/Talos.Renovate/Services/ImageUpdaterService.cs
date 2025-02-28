@@ -19,22 +19,36 @@ namespace Talos.Renovate.Services
         IRedisProvider redisProvider,
         IGitHostServiceProvider gitHostServiceProvider,
         IDockerComposeFileService _dockerComposeFileService,
-        IGitService _git) : IImageUpdaterService
+        IGitService _git,
+        IPushQueueMutator _pushQueue) : IImageUpdaterService
     {
         private int _isRunning = 0;
-
-        private readonly record struct ScheduledPush(
-            ImageUpdateIdentity Target,
-            ImageUpdate Update)
-        {
-
-        }
 
         private const string UPDATES_BRANCH_NAME_PREFIX = "talos/updates";
         private readonly ImageUpdateSettings _updateSettings = updateOptions.Value;
         private readonly IDatabase _redis = redisProvider.GetDatabase(options.Value.RedisDatabase);
         public static string GetUpdatesBranchName(string targetBranchName) => $"{UPDATES_BRANCH_NAME_PREFIX}-{targetBranchName}";
+
         public async Task RunAsync(CancellationToken? cancellationToken = null)
+        {
+            switch (_updateSettings.Schedule.Type)
+            {
+                case ScheduleType.Delay:
+                    while (!(cancellationToken?.IsCancellationRequested ?? false))
+                    {
+                        await RunUpdateAsync(cancellationToken);
+                        if (cancellationToken.HasValue)
+                            await Task.Delay(TimeSpan.FromSeconds(_updateSettings.Schedule.DelaySeconds), cancellationToken.Value);
+                        else
+                            await Task.Delay(TimeSpan.FromSeconds(_updateSettings.Schedule.DelaySeconds));
+                    }
+                    break;
+                default:
+                    throw new InvalidOperationException($"Unknown {nameof(ScheduleType)}: {_updateSettings.Schedule.Type}");
+            }
+        }
+
+        public async Task RunUpdateAsync(CancellationToken? cancellationToken = null)
         {
             if (Interlocked.CompareExchange(ref _isRunning, 1, 0) != 0)
                 throw new InvalidOperationException("An image update run is already in progress, please try again later.");
@@ -98,10 +112,38 @@ namespace Talos.Renovate.Services
             if (scheduledPushes.Count == 0)
                 return;
 
+            // if any pushes are failed to be scheduled, its fine, we are continually
+            // scheduling them anyways so they'll get scheduled again on next run
+            List<Exception> exceptions = [];
+            foreach (var push in scheduledPushes)
+            {
+                try
+                {
+                    await _pushQueue.UpsertAndEnqueuePush(push);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Enqueueing push {Push} failed due to exception: {Exception}", push.Target, ex.Message);
+                    exceptions.Add(ex);
+                }
+            }
+            if (exceptions.Count > 0)
+                throw new AggregateException(exceptions);
+        }
+
+        public (HostConfiguration Host, RepositoryConfiguration Repository) GetRepositoryConfiguration(string remoteUrl)
+        {
+            var repositoryConfiguration = _updateSettings.Repositories.Single(r => r.NormalizedUrl == remoteUrl);
+            var hostConfiguration = updateOptions.Value.Hosts[repositoryConfiguration.Host];
+            return (hostConfiguration, repositoryConfiguration);
+        }
+
+        public async Task PushUpdates(HostConfiguration host, RepositoryConfiguration repositoryConfiguration, List<ScheduledPush> scheduledPushes, CancellationToken? cancellationToken = null)
+        {
+            using var repoDir = await _git.CloneAsync(host, repositoryConfiguration);
+
             // this will clone and checkout the target branch if its set, otherwise it will take the default branch
             var targetBranchName = await _git.GetNameOfCurrentBranchAsync(repoDir.Path);
-
-
             if (repositoryConfiguration.CreateMergeRequestsForPushes)
                 await _git.CreateAndCheckoutBranch(repoDir.Path, GetUpdatesBranchName(targetBranchName));
 
@@ -157,7 +199,20 @@ namespace Talos.Renovate.Services
                 }
             }
 
-            throw new NotImplementedException("we're getting there");
+            // since we have already pushed the change, we can't really fail out of this
+            // the cache will reach consistency with the upstream on subsequent runs so
+            // we can safely discard these errors
+            foreach (var push in scheduledPushes)
+            {
+                try
+                {
+                    await CompletePushAsync(push);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Ran into exception while completing push for push {Push}: {ExceptionMessage}", push.Target.ToString(), ex.Message);
+                }
+            }
         }
 
     }

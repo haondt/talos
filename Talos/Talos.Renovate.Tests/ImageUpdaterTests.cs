@@ -21,6 +21,7 @@ namespace Talos.Renovate.Tests
             var mockGitHostProvider = new Mock<IGitHostServiceProvider>();
             var mockDockerComposeFileService = new Mock<IDockerComposeFileService>();
             var mockGitService = new Mock<IGitService>();
+            var mockQueueMutator = new Mock<IPushQueueMutator>();
             return new ImageUpdaterService(
                 Options.Create(new Models.ImageUpdateSettings
                 {
@@ -34,7 +35,8 @@ namespace Talos.Renovate.Tests
                 mockRedisProvider.Object,
                 mockGitHostProvider.Object,
                 mockDockerComposeFileService.Object,
-                mockGitService.Object);
+                mockGitService.Object,
+                mockQueueMutator.Object);
         }
 
         public static IEnumerable<object[]> GetTestData()
@@ -299,7 +301,7 @@ namespace Talos.Renovate.Tests
             var sut = GetSut(new FakeSkopeoService(tagsByName, digestsByNameAndTag));
             var currentFullImage = currentTagAndDigest.As(q => $"{name}:{q}").Or(name);
             var becauseString = $"the image was {currentFullImage} with maxBump {maxBumpSize}";
-            var result = await sut.SelectUpdateTarget(currentFullImage, maxBumpSize);
+            var result = await sut.SelectUpdateTarget(currentFullImage, maxBumpSize, false);
             result.HasValue.Should().Be(expectedResult.HasValue, becauseString);
 
             if (result.HasValue)

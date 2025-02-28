@@ -14,7 +14,6 @@ namespace Talos.Renovate.Services
         private readonly SkopeoSettings _settings;
         private readonly IDatabase _redis;
         private readonly TimeSpan _cacheDuration;
-        private readonly string _keyPrefix;
         private readonly Dictionary<string, SemaphoreSlim> _semaphores = new();
         private readonly object _semaphoreLock = new();
 
@@ -27,12 +26,11 @@ namespace Talos.Renovate.Services
             _settings = options.Value;
             _redis = redisProvider.GetDatabase(_settings.RedisDatabase);
             _cacheDuration = TimeSpan.FromHours(options.Value.CacheDurationHours);
-            _keyPrefix = $"{nameof(SkopeoService)}";
         }
 
         public async Task<List<string>> ListTags(string image, CancellationToken? cancellationToken = null)
         {
-            var response = await PerformSkopeoOperation("list-tags", image, cancellationToken);
+            var response = await PerformSkopeoOperation("list-tags", RedisNamespacer.Skopeo.Tags(image), image, cancellationToken);
             var deserialized = JsonConvert.DeserializeObject<SkopeoListTagsResponse>(response)
                 ?? throw new JsonSerializationException($"Failed to deserialize skopeo response for get-tags {image}");
             return deserialized.Tags;
@@ -40,15 +38,14 @@ namespace Talos.Renovate.Services
 
         public async Task<SkopeoInspectResponse> Inspect(string image, CancellationToken? cancellationToken = null)
         {
-            var response = await PerformSkopeoOperation("inspect", image, cancellationToken);
+            var response = await PerformSkopeoOperation("inspect", RedisNamespacer.Skopeo.Tags(image), image, cancellationToken);
             var deserialized = JsonConvert.DeserializeObject<SkopeoInspectResponse>(response)
                 ?? throw new JsonSerializationException($"Failed to deserialize skopeo response for inspect {image}");
             return deserialized;
         }
 
-        private async Task<string> PerformSkopeoOperation(string operation, string image, CancellationToken? cancellationToken = null)
+        private async Task<string> PerformSkopeoOperation(string operation, string cacheKey, string image, CancellationToken? cancellationToken = null)
         {
-            var cacheKey = $"{_keyPrefix}:{operation}:{image}";
 
             var cachedResponse = await _redis.StringGetAsync(cacheKey);
             if (!cachedResponse.IsNull)

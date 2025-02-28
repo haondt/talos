@@ -9,12 +9,12 @@ namespace Talos.Renovate.Services
     {
         private Task<bool> ClearImageUpdateDataCacheAsync(ImageUpdateIdentity id)
         {
-            return _redis.KeyDeleteAsync(id.ToString());
+            return _redis.KeyDeleteAsync(RedisNamespacer.UpdateTarget(id.ToString()));
         }
 
         private async Task<Optional<ImageUpdateData>> TryGetImageUpdateDataAsync(ImageUpdateIdentity id)
         {
-            var cachedResponse = await _redis.StringGetAsync(id.ToString());
+            var cachedResponse = await _redis.StringGetAsync(RedisNamespacer.UpdateTarget(id.ToString()));
             if (cachedResponse.IsNull)
                 return new();
             var deserialized = JsonConvert.DeserializeObject<ImageUpdateData>(cachedResponse.ToString(), SerializationConstants.SerializerSettings);
@@ -31,7 +31,7 @@ namespace Talos.Renovate.Services
         {
             var serialized = JsonConvert.SerializeObject(data, SerializationConstants.SerializerSettings)
                 ?? throw new JsonSerializationException($"Failed to serialize image update data for image {id}");
-            return _redis.StringSetAsync(id.ToString(), serialized);
+            return _redis.StringSetAsync(RedisNamespacer.UpdateTarget(id.ToString()), serialized);
         }
     }
 }

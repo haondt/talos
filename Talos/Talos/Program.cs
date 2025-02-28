@@ -1,3 +1,4 @@
+using Haondt.Identity.StorageKey;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -8,6 +9,8 @@ using Talos.Docker.Extensions;
 using Talos.Domain.Extensions;
 using Talos.Integration.Command.Extensions;
 using Talos.Renovate.Extensions;
+
+StorageKeyConvert.DefaultSerializerSettings.TypeNameStrategy = TypeNameStrategy.SimpleTypeConverter;
 
 using var host = Host.CreateDefaultBuilder()
     .ConfigureAppConfiguration((context, config) =>

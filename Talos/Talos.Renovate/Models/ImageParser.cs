@@ -1,5 +1,6 @@
 ﻿using Haondt.Core.Extensions;
 using Haondt.Core.Models;
+using Newtonsoft.Json;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -194,6 +195,7 @@ namespace Talos.Renovate.Models
             return sb.ToString();
         }
 
+        [JsonIgnore]
         public SemanticVersionPrecison Precison => Minor.HasValue
             ? (Patch.HasValue ? SemanticVersionPrecison.Patch : SemanticVersionPrecison.Minor)
             : SemanticVersionPrecison.Major;

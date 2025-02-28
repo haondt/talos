@@ -179,9 +179,9 @@ namespace Talos.Renovate.Services
         }
 
 
-        public async Task<Optional<ImageUpdate>> SelectUpdateTarget(string image, BumpSize maxBumpSize)
+        public async Task<Optional<ImageUpdate>> SelectUpdateTarget(string image, BumpSize maxBumpSize, bool insertDefaultDomain = true)
         {
-            var parsedActiveImage = ImageParser.Parse(image, true);
+            var parsedActiveImage = ImageParser.Parse(image, insertDefaultDomain);
             // use untagged version for more cache hits
             var tags = await _skopeoService.ListTags(parsedActiveImage.Untagged);
             var parsedTags = tags.Select(ImageParser.TryParseTag)
@@ -320,6 +320,33 @@ namespace Talos.Renovate.Services
             return new(new(parsedActiveImage, desiredUpdate.Image, desiredUpdate.ImageCreatedOn, desiredUpdate.Bump));
         }
 
+        private async Task CompletePushAsync(ScheduledPush push)
+        {
+            var cached = (await TryGetImageUpdateDataAsync(push.Target))
+                .As(c =>
+                {
+                    c.Image = push.Update.NewImage.ToString();
+                    return c;
+                }).Or(new ImageUpdateData()
+                {
+                    Image = push.Update.NewImage.ToString()
+                });
 
+            if (cached.LastNotified != null)
+                if (cached.LastNotified.CreatedOn <= push.Update.NewImageCreatedOn)
+                    cached.LastNotified = null;
+
+            if (cached.Interaction != null)
+            {
+                if (cached.Interaction.PendingImageCreatedOn <= push.Update.NewImageCreatedOn)
+                {
+                    if (cached.Interaction.InteractionId != null)
+                        await _notificationService.DeleteInteraction(cached.Interaction.InteractionId);
+                    cached.Interaction = null;
+                }
+            }
+
+            await SetImageUpdateDataAsync(push.Target, cached);
+        }
     }
 }

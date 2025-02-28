@@ -32,6 +32,10 @@ namespace Talos.Renovate.Extensions
             services.AddHttpClient<IGitHostService, GitLabService>();
             services.AddSingleton<IGitService, GitService>();
             services.Configure<GitSettings>(configuration.GetSection(nameof(GitSettings)));
+            services.AddSingleton<IPushQueueMutator, PushQueueMutator>();
+            services.Configure<UpdateThrottlingSettings>(configuration.GetSection(nameof(UpdateThrottlingSettings)));
+            services.AddSingleton<IUpdateThrottlingQueueConsumer, UpdateThrottlingQueueConsumer>();
+
 
             return services;
         }

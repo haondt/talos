@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Haondt.Json" Version="0.2.1" />
+    <PackageReference Include="Haondt.Json" Version="0.2.5" />
     <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" Version="9.0.2" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.2" />
     <PackageReference Include="StackExchange.Redis" Version="2.8.24" />

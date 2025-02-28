@@ -1,4 +1,4 @@
-﻿using Haondt.Core.Converters;
+﻿using Haondt.Json.Converters;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using YamlDotNet.Serialization;
@@ -28,6 +28,8 @@ namespace Talos.Renovate.Models
                 }
             };
             SerializerSettings.Converters.Add(new AbsoluteDateTimeJsonConverter());
+            SerializerSettings.Converters.Add(new GenericStronglyTypedUnionJsonConverter());
+            SerializerSettings.Converters.Add(new GenericOptionalJsonConverter());
 
 
             SkopeoSerializerSettings = new JsonSerializerSettings();

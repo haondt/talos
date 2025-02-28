@@ -119,7 +119,6 @@ namespace Talos.Renovate.Services
         {
             var images = new List<(ImageUpdateIdentity, TalosSettings, string)>();
 
-            var normalizedUrl = repository.Url.TrimEnd('/');
             foreach (var (absoluteFilePath, relativeFilePath) in GetTargetFiles(clonedRepositoryDirectory, repository))
             {
                 var content = File.ReadAllText(absoluteFilePath);
@@ -129,7 +128,7 @@ namespace Talos.Renovate.Services
 
                 foreach (var service in yaml.Services)
                 {
-                    var id = new ImageUpdateIdentity(normalizedUrl, relativeFilePath, service.Key);
+                    var id = new ImageUpdateIdentity(repository.NormalizedUrl, relativeFilePath, service.Key);
 
                     if (string.IsNullOrEmpty(service.Value.Image))
                     {
@@ -150,7 +149,7 @@ namespace Talos.Renovate.Services
                     }
 
                     images.Add((
-                        new(normalizedUrl, relativeFilePath, service.Key),
+                        new(repository.NormalizedUrl, relativeFilePath, service.Key),
                         service.Value.XTalos,
                         service.Value.Image));
                 }

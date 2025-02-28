@@ -113,10 +113,10 @@ namespace Talos.Integration.Command.Services
                         maskedCommand, maskedArguments, ex.Result.Duration);
                 else
                     if (ex.Result.ExitCode.HasValue)
-                    _logger.LogError("Command {Command} {Arguments} failed with exit code {ExitCode}.",
+                    _logger.LogError(ex, "Command {Command} {Arguments} failed with exit code {ExitCode}.",
                         maskedCommand, maskedArguments, ex.Result.ExitCode.Value);
                 else
-                    _logger.LogError("Command {Command} {Arguments} failed with no exit code.",
+                    _logger.LogError(ex, "Command {Command} {Arguments} failed with no exit code.",
                         maskedCommand, maskedArguments);
                 throw;
             }
@@ -177,7 +177,7 @@ namespace Talos.Integration.Command.Services
                 else
                     result = await command.ExecuteAsync();
             }
-            catch (OperationCanceledException ex)
+            catch (TaskCanceledException ex)
             {
                 var wasTimedOut = timeoutCts.As(q => q.IsCancellationRequested)
                     .Or(false);
