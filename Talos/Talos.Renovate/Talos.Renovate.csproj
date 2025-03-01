@@ -9,6 +9,7 @@
   <ItemGroup>
     <PackageReference Include="Haondt.Json" Version="0.2.5" />
     <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" Version="9.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.2" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.2" />
     <PackageReference Include="StackExchange.Redis" Version="2.8.24" />
     <PackageReference Include="YamlDotNet" Version="16.3.0" />

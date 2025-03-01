@@ -19,5 +19,10 @@ namespace Talos.Renovate.Tests.Fakes
         {
             return Task.CompletedTask;
         }
+
+        public Task Notify(PipelineCompletionEvent pipelineCompleted)
+        {
+            return Task.CompletedTask;
+        }
     }
 }

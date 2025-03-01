@@ -3,7 +3,9 @@ using Haondt.Core.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using StackExchange.Redis;
+using System.Text;
 using System.Text.RegularExpressions;
+using Talos.Core.Models;
 using Talos.Integration.Command.Exceptions;
 using Talos.Renovate.Abstractions;
 using Talos.Renovate.Models;
@@ -29,24 +31,6 @@ namespace Talos.Renovate.Services
         private readonly IDatabase _redis = redisProvider.GetDatabase(options.Value.RedisDatabase);
         public static string GetUpdatesBranchName(string targetBranchName) => $"{UPDATES_BRANCH_NAME_PREFIX}-{targetBranchName}";
 
-        public async Task RunAsync(CancellationToken? cancellationToken = null)
-        {
-            switch (_updateSettings.Schedule.Type)
-            {
-                case ScheduleType.Delay:
-                    while (!(cancellationToken?.IsCancellationRequested ?? false))
-                    {
-                        await RunUpdateAsync(cancellationToken);
-                        if (cancellationToken.HasValue)
-                            await Task.Delay(TimeSpan.FromSeconds(_updateSettings.Schedule.DelaySeconds), cancellationToken.Value);
-                        else
-                            await Task.Delay(TimeSpan.FromSeconds(_updateSettings.Schedule.DelaySeconds));
-                    }
-                    break;
-                default:
-                    throw new InvalidOperationException($"Unknown {nameof(ScheduleType)}: {_updateSettings.Schedule.Type}");
-            }
-        }
 
         public async Task RunUpdateAsync(CancellationToken? cancellationToken = null)
         {
@@ -84,6 +68,11 @@ namespace Talos.Renovate.Services
             {
                 Interlocked.Exchange(ref _isRunning, 0);
             }
+        }
+
+        public Task<bool> CheckIfCommitBelongsToUs(string commit)
+        {
+            return _redis.SetContainsAsync(RedisNamespacer.Git.Commits, commit);
         }
 
 
@@ -155,7 +144,16 @@ namespace Talos.Renovate.Services
                 File.WriteAllText(filePath, updatedContent);
             }
 
-            await _git.CommitAllWithMessageAsync(repoDir.Path, "updating images");
+            var commitTitle = "[Talos] Updating images";
+            var commitDescriptionSb = new StringBuilder();
+            foreach (var grp in scheduledPushes.GroupBy(q => q.Target.RelativeFilePath))
+            {
+                commitDescriptionSb.AppendLine(grp.Key);
+                foreach (var push in grp)
+                    commitDescriptionSb.AppendLine($"  {push.Target.ServiceKey}: {push.Update.PreviousImage} -> {push.Update.NewImage}");
+            }
+            var commit = await _git.Commit(repoDir.Path, commitTitle, description: commitDescriptionSb.ToString(), all: true);
+            await _redis.SetAddAsync(RedisNamespacer.Git.Commits, commit);
 
             var gitHost = gitHostServiceProvider.GetGitHost(host);
             if (repositoryConfiguration.CreateMergeRequestsForPushes)

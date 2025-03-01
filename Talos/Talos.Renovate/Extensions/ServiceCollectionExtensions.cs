@@ -34,7 +34,8 @@ namespace Talos.Renovate.Extensions
             services.Configure<GitSettings>(configuration.GetSection(nameof(GitSettings)));
             services.AddSingleton<IPushQueueMutator, PushQueueMutator>();
             services.Configure<UpdateThrottlingSettings>(configuration.GetSection(nameof(UpdateThrottlingSettings)));
-            services.AddSingleton<IUpdateThrottlingQueueConsumer, UpdateThrottlingQueueConsumer>();
+            services.AddHostedService<UpdateThrottlingQueueConsumer>();
+            services.AddHostedService<ImageUpdateBackgroundService>();
 
 
             return services;

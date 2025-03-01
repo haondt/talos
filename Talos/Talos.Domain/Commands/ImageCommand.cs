@@ -7,8 +7,8 @@ namespace Talos.Domain.Commands
 {
     public partial class TalosCommandGroup
     {
-        [SlashCommand("latest", "Check the latest version of a container")]
-        public async Task LatestCommand(
+        [SlashCommand("image", "Check which image a container is running")]
+        public async Task ImageCommand(
             [
                 Summary("host", "Host name"),
                 Autocomplete(typeof(HostAutocompleteHandler))
@@ -27,7 +27,7 @@ namespace Talos.Domain.Commands
             });
 
             socket.StageUpdate(b => b
-                .AddDescriptionPart("**Get container image latest version**")
+                .AddDescriptionPart("**Get container image**")
                 .AddDescriptionPart($"-# {host} » {container}"));
 
             try
@@ -38,19 +38,14 @@ namespace Talos.Domain.Commands
                     throw new ArgumentException($"The specified host '{host}' is not available.");
 
                 var dockerClient = dockerClientFactory.Connect(host);
-                var version = await dockerClient.GetContainerVersionAsync(container, processHandle.CancellationToken);
                 var imageName = await dockerClient.GetContainerImageNameAsync(container, processHandle.CancellationToken);
-                var imageDigest = await dockerClient.GetContainerImageDigestAsync(container, processHandle.CancellationToken);
 
                 await socket.UpdateAsync(b => b
-                    .AddDescriptionPart($"```\n{imageName}\n{version}\n\n{imageDigest}\n```"));
+                    .AddDescriptionPart($"```\n{imageName}\n```"));
             }
             catch (Exception ex)
             {
-                await socket.UpdateAsync(b => b
-                    .SetColor(Color.Red)
-                    .AddDescriptionPart("### Command execution failed")
-                    .AddDescriptionPart("> " + string.Join("\n> ", ex.Message.Trim().Split('\n'))));
+                await RenderErrorAsync(socket, ex);
                 throw;
             }
         }

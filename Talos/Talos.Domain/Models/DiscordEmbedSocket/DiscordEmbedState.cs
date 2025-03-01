@@ -23,6 +23,7 @@ namespace Talos.Domain.Models.DiscordEmbedSocket
         public List<DiscordEmbedField> Fields = [];
         public List<DiscordEmbedDescriptionPart> DescriptionParts = [];
 
+        public bool Emphemeral { get; set; } = false;
         public bool Dirty { get; set; } = true;
         public bool HasSentInitialResponse { get; set; } = false;
 
@@ -45,7 +46,7 @@ namespace Talos.Domain.Models.DiscordEmbedSocket
             }
             else
             {
-                await connector.RespondAsync(embed: embed, components: components);
+                await connector.RespondAsync(embed: embed, components: components, ephemeral: Emphemeral);
                 HasSentInitialResponse = true;
             }
         }

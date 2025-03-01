@@ -1,9 +1,11 @@
 ﻿using Haondt.Core.Extensions;
 using Haondt.Core.Models;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using StackExchange.Redis;
+using Talos.Core.Models;
 using Talos.Renovate.Abstractions;
 using Talos.Renovate.Models;
 
@@ -13,13 +15,13 @@ namespace Talos.Renovate.Services
         IOptions<UpdateThrottlingSettings> settings,
         ILogger<PushQueueMutator> _logger,
         IPushQueueMutator _throttlingService,
-        IImageUpdaterService imageUpdaterService) : IUpdateThrottlingQueueConsumer
+        IImageUpdaterService imageUpdaterService) : BackgroundService
     {
         private readonly IDatabase _queueDb = redisProvider.GetDatabase(settings.Value.RedisDatabase);
 
-        public async Task RunAsync(CancellationToken? cancellationToken = default)
+        protected override async Task ExecuteAsync(CancellationToken cancellationToken)
         {
-            while (!(cancellationToken?.IsCancellationRequested ?? false))
+            while (!cancellationToken.IsCancellationRequested)
             {
                 try
                 {
@@ -29,12 +31,10 @@ namespace Talos.Renovate.Services
                 {
                     _logger.LogError(ex, "Failed to process pushes: {ErrorMessage}", ex.Message);
                 }
-                if (cancellationToken.HasValue)
-                    await Task.Delay(TimeSpan.FromSeconds(settings.Value.QueuePollingFrequencyInSeconds), cancellationToken.Value);
-                else
-                    await Task.Delay(TimeSpan.FromSeconds(settings.Value.QueuePollingFrequencyInSeconds));
+                await Task.Delay(TimeSpan.FromSeconds(settings.Value.QueuePollingFrequencyInSeconds), cancellationToken);
             }
         }
+
         private async Task<List<ScheduledPush>> GetPendingPushesAsync()
         {
             var keys = await _queueDb.SetMembersAsync(RedisNamespacer.Pushes.Queue);
@@ -48,7 +48,7 @@ namespace Talos.Renovate.Services
             return pushes;
         }
 
-        public async Task CompletePushesAsync(IEnumerable<ScheduledPush> pushes, AbsoluteDateTime now)
+        private async Task CompletePushesAsync(IEnumerable<ScheduledPush> pushes, AbsoluteDateTime now)
         {
             var keys = pushes.Select(p => (RedisValue)RedisNamespacer.Pushes.Push(p.Target.ToString())).ToArray();
             foreach (var push in pushes)
@@ -135,5 +135,6 @@ namespace Talos.Renovate.Services
             }
 
         }
+
     }
 }

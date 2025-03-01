@@ -1,0 +1,6 @@
+@Talos.Api_HostAddress = http://localhost:5110
+
+GET {{Talos.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

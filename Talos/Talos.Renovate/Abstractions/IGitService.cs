@@ -6,7 +6,10 @@ namespace Talos.Renovate.Abstractions
     {
         Task<bool> CheckIfHasUpstreamAsync(string repositoryDirectory, string? branchName = null);
         Task<TemporaryDirectory> CloneAsync(HostConfiguration host, RepositoryConfiguration repository);
-        Task CommitAllWithMessageAsync(string repositoryDirectory, string message);
+        Task<string> Commit(string repositoryDirectory,
+            string title,
+            string? description = null,
+            bool all = false);
         Task CreateAndCheckoutBranch(string repoDirectory, string branchName);
         Task<string> GetNameOfCurrentBranchAsync(string repoDirectory);
         Task PullAsync(string repositoryDirectory, bool rebase = false);

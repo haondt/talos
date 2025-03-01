@@ -4,6 +4,7 @@ using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Talos.Discord.Abstractions;
+using Talos.Discord.Extensions;
 using Talos.Discord.Models;
 
 namespace Talos.Discord.Services
@@ -53,50 +54,7 @@ namespace Talos.Discord.Services
 
         public Task LogAsync(LogMessage logMessage)
         {
-            var logLevel = logMessage.Severity switch
-            {
-                LogSeverity.Critical => LogLevel.Critical,
-                LogSeverity.Error => LogLevel.Error,
-                LogSeverity.Warning => LogLevel.Warning,
-                LogSeverity.Info => LogLevel.Information,
-                LogSeverity.Verbose => LogLevel.Debug,
-                LogSeverity.Debug => LogLevel.Trace,
-                _ => LogLevel.Information
-            };
-
-            if (logMessage.Exception != null)
-            {
-                if (!string.IsNullOrEmpty(logMessage.Message))
-                    _logger.Log(
-                        logLevel,
-                        logMessage.Exception,
-                        "{Source} {Message}",
-                        logMessage.Source,
-                        logMessage.Message);
-                else
-                    _logger.Log(
-                        logLevel,
-                        logMessage.Exception,
-                        "{Source}",
-                        logMessage.Source);
-            }
-            else
-            {
-
-                if (!string.IsNullOrEmpty(logMessage.Message))
-                    _logger.Log(
-                        logLevel,
-                        "{Source} {Message}",
-                        logMessage.Source,
-                        logMessage.Message);
-                else
-                    _logger.Log(
-                        logLevel,
-                        "{Source}",
-                        logMessage.Source);
-
-            }
-
+            logMessage.LogTo(_logger);
             return Task.CompletedTask;
         }
     }

@@ -88,8 +88,7 @@ namespace Talos.Renovate.Services
                 var command = _commandFactory.Create(GIT_BINARY)
                         .WithArguments(ab => ab
                             .Add("clone")
-                            .AddIf(!string.IsNullOrEmpty(repository.Branch), "-b")
-                            .AddIf(!string.IsNullOrEmpty(repository.Branch), repository.Branch!)
+                            .AddIf(!string.IsNullOrEmpty(repository.Branch), ["-b", repository.Branch!])
                             .Add(url)
                             .Add(repoDir.Path));
                 foreach (var sensitiveString in sensitiveStrings)
@@ -107,15 +106,27 @@ namespace Talos.Renovate.Services
             }
         }
 
-        public Task CommitAllWithMessageAsync(string repositoryDirectory, string message)
+        public async Task<string> Commit(string repositoryDirectory,
+            string title,
+            string? description = null,
+            bool all = false)
         {
-            return _commandFactory.Create(GIT_BINARY)
+            await _commandFactory.Create(GIT_BINARY)
                 .WithWorkingDirectory(repositoryDirectory)
                 .WithArguments(ab => ab
                     .Add("commit")
-                    .Add("-am")
-                    .Add(message))
+                    .AddIf(all, "-a")
+                    .AddRange(["-m", title])
+                    .AddIf(!string.IsNullOrEmpty(description), ["-m", description!]))
                 .ExecuteAndCaptureStdoutAsync();
+
+            var sha = await _commandFactory.Create(GIT_BINARY)
+                .WithWorkingDirectory(repositoryDirectory)
+                .WithArguments(ab => ab
+                    .Add("rev-parse")
+                    .Add("HEAD"))
+                .ExecuteAndCaptureStdoutAsync();
+            return sha.Trim();
         }
 
         public Task PushAsync(
@@ -132,8 +143,7 @@ namespace Talos.Renovate.Services
                 .WithArguments(ab => ab
                     .Add("push")
                     .AddIf(force, "-f")
-                    .AddIf(!string.IsNullOrEmpty(setUpstream), "-u")
-                    .AddIf(!string.IsNullOrEmpty(setUpstream), setUpstream!)
+                    .AddIf(!string.IsNullOrEmpty(setUpstream), ["-u", setUpstream!])
                     .Add(url)
                     .Add(branchName ?? "HEAD"));
 

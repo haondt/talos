@@ -20,5 +20,9 @@ namespace Talos.Domain.Services
             return Task.CompletedTask;
         }
 
+        public Task Notify(PipelineCompletionEvent pipelineCompleted)
+        {
+            return Task.CompletedTask;
+        }
     }
 }

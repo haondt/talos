@@ -13,7 +13,7 @@ namespace Talos.Discord.Extensions
     {
         public static IServiceCollection AddTalosDiscordServices(this IServiceCollection services, IConfiguration configuration)
         {
-            services.AddSingleton<IDiscordBot, DiscordBot>();
+            services.AddHostedService<DiscordBot>();
             services.AddSingleton(_ => new DiscordSocketClient(new DiscordSocketConfig
             {
                 GatewayIntents = GatewayIntents.Guilds,

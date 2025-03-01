@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using StackExchange.Redis;
+using Talos.Core.Models;
 using Talos.Integration.Command.Abstractions;
 using Talos.Renovate.Abstractions;
 using Talos.Renovate.Extensions;

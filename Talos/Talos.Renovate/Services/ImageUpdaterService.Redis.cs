@@ -1,6 +1,7 @@
 ﻿using Haondt.Core.Models;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+using Talos.Core.Models;
 using Talos.Renovate.Models;
 
 namespace Talos.Renovate.Services

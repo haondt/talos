@@ -1,4 +1,4 @@
-﻿namespace Talos.Renovate.Models
+﻿namespace Talos.Core.Models
 {
     public static class RedisNamespacer
     {
@@ -22,6 +22,23 @@
             private static readonly string Segment = "skopeo";
             public static string Tags(string id) => $"{Segment}:tags:{id}";
             public static string Inspect(string id) => $"{Segment}:inspect:{id}";
+        }
+
+        public static class Git
+        {
+            private static readonly string Segment = "git";
+            public static readonly string Commits = $"{Segment}:commits";
+        }
+
+        public static class Webhooks
+        {
+            private static readonly string Segment = "webhooks";
+            public static class Tokens
+            {
+                private static readonly string Segment = $"{Webhooks.Segment}:tokens";
+                public static string ByName => $"{Segment}:byname";
+                public static string ByValue => $"{Segment}:byvalue";
+            }
         }
     }
 }

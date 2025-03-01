@@ -4,6 +4,7 @@ using Talos.Discord.Extensions;
 using Talos.Discord.Models;
 using Talos.Domain.Abstractions;
 using Talos.Domain.Commands;
+using Talos.Domain.Models;
 using Talos.Domain.Services;
 using Talos.Renovate.Abstractions;
 
@@ -19,6 +20,8 @@ namespace Talos.Domain.Extensions
             services.RegisterInteraction<TalosCommandGroup>();
             services.AddSingleton<IDiscordCommandProcessRegistry, DiscordCommandProcessRegistry>();
             services.AddSingleton<INotificationService, DiscordNotificationService>();
+            services.AddSingleton<IWebHookAuthenticationService, WebhookAuthenticationService>();
+            services.Configure<ApiSettings>(configuration.GetSection(nameof(ApiSettings)));
             return services;
         }
     }

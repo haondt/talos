@@ -1,14 +1,16 @@
 ﻿// See https://aka.ms/new-console-template for more information
 using Discord;
 using Discord.WebSocket;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Talos.Discord.Abstractions;
+using Talos.Discord.Extensions;
 using Talos.Discord.Models;
 
 namespace Talos.Discord.Services;
 
-public class DiscordBot : IDiscordBot
+public class DiscordBot : BackgroundService
 {
     private readonly DiscordSocketClient _client;
     private readonly IInteractionServiceHandler _interactionService;
@@ -38,20 +40,26 @@ public class DiscordBot : IDiscordBot
         _logger.LogInformation("Command list synced.");
     }
 
-    public async Task StartAsync()
+    private Task LogAsync(LogMessage logMessage)
+    {
+        logMessage.LogTo(_logger);
+        return Task.CompletedTask;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await _client.LoginAsync(TokenType.Bot, _settings.BotToken);
         await _client.StartAsync();
-    }
 
-    public async Task StopAsync()
-    {
-        await _client.StopAsync();
-    }
+        try
+        {
+            await Task.Delay(Timeout.Infinite, stoppingToken);
+        }
+        finally
+        {
+            await _client.StopAsync();
+            await _client.LogoutAsync();
+        }
 
-    private Task LogAsync(LogMessage logMessage)
-    {
-        _logger.LogInformation(logMessage.ToString());
-        return Task.CompletedTask;
     }
 }

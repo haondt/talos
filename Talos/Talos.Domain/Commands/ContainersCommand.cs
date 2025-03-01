@@ -48,11 +48,7 @@ namespace Talos.Domain.Commands
             }
             catch (Exception ex)
             {
-                await socket.UpdateAsync(b => b
-                    .SetColor(Color.Red)
-                    .AddDescriptionPart("### Command execution failed")
-                    .AddDescriptionPart("> " + string.Join("\n> ", ex.Message.Trim().Split('\n'))));
-
+                await RenderErrorAsync(socket, ex);
                 throw;
             }
         }

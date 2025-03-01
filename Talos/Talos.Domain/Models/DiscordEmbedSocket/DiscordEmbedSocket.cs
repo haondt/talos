@@ -10,6 +10,7 @@ namespace Talos.Domain.Models.DiscordEmbedSocket
         public Haondt.Core.Models.Optional<Color> Color { get; set; }
         public Haondt.Core.Models.Optional<string> CancelButtonId { get; set; }
 
+        public bool Ephemeral { get; set; } = false;
         public bool DeferOnCreate { get; set; } = false;
         public bool SendEmbedOnCreate { get; set; } = true;
 
@@ -33,7 +34,8 @@ namespace Talos.Domain.Models.DiscordEmbedSocket
             {
                 Title = _options.Title,
                 CancelButtonId = _options.CancelButtonId,
-                DefaultColor = options.Color
+                DefaultColor = options.Color,
+                Emphemeral = options.Ephemeral
             };
         }
 

@@ -7,7 +7,7 @@ namespace Talos.Domain.Commands
 {
     public partial class TalosCommandGroup
     {
-        [SlashCommand("version", "Get the version of a container")]
+        [SlashCommand("version", "Check container image version via 'org.opencontainers.image.version' label")]
         public async Task VersionCommand(
             [
                 Summary("host", "Host name"),
@@ -39,18 +39,13 @@ namespace Talos.Domain.Commands
 
                 var dockerClient = dockerClientFactory.Connect(host);
                 var version = await dockerClient.GetContainerVersionAsync(container, processHandle.CancellationToken);
-                var imageName = await dockerClient.GetContainerImageNameAsync(container, processHandle.CancellationToken);
-                var imageDigest = await dockerClient.GetContainerImageDigestAsync(container, processHandle.CancellationToken);
 
                 await socket.UpdateAsync(b => b
-                    .AddDescriptionPart($"```\n{imageName}\n{version}\n\n{imageDigest}\n```"));
+                    .AddDescriptionPart($"```{version}```"));
             }
             catch (Exception ex)
             {
-                await socket.UpdateAsync(b => b
-                    .SetColor(Color.Red)
-                    .AddDescriptionPart("### Command execution failed")
-                    .AddDescriptionPart("> " + string.Join("\n> ", ex.Message.Trim().Split('\n'))));
+                await RenderErrorAsync(socket, ex);
                 throw;
             }
         }

@@ -8,7 +8,7 @@ namespace Talos.Integration.Command.Extensions
 {
     public static class ServiceCollectionExtensions
     {
-        public static IServiceCollection AddTalosCommandServices(this IServiceCollection services, IConfiguration configuration)
+        public static IServiceCollection AddTalosIntegrationServices(this IServiceCollection services, IConfiguration configuration)
         {
             services.AddSingleton<ICommandFactory, CommandFactory>();
             services.Configure<CommandSettings>(configuration.GetSection(nameof(CommandSettings)));

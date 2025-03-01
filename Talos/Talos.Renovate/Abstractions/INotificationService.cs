@@ -7,5 +7,6 @@ namespace Talos.Renovate.Abstractions
         Task<string> CreateInteraction(ImageUpdate update);
         Task DeleteInteraction(string id);
         Task Notify(ImageUpdate update);
+        Task Notify(PipelineCompletionEvent pipelineCompleted);
     }
 }
