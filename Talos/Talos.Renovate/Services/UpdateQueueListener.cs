@@ -11,7 +11,7 @@ using Talos.Renovate.Models;
 
 namespace Talos.Renovate.Services
 {
-    public class UpdateThrottlingQueueConsumer(IRedisProvider redisProvider,
+    public class UpdateQueueListener(IRedisProvider redisProvider,
         IOptions<UpdateThrottlingSettings> settings,
         ILogger<PushQueueMutator> _logger,
         IPushQueueMutator _throttlingService,
@@ -48,18 +48,31 @@ namespace Talos.Renovate.Services
             return pushes;
         }
 
-        private async Task CompletePushesAsync(IEnumerable<ScheduledPush> pushes, AbsoluteDateTime now)
+        private async Task CompletePushesAsync(IEnumerable<ScheduledPush> pushes, IEnumerable<ScheduledPushDeadLetter> deadletters, AbsoluteDateTime now)
         {
-            var keys = pushes.Select(p => (RedisValue)RedisNamespacer.Pushes.Push(p.Target.ToString())).ToArray();
             foreach (var push in pushes)
             {
                 var pushId = Guid.NewGuid().ToString();
                 await _queueDb.SortedSetAddAsync(RedisNamespacer.Pushes.Timestamps.Domain(push.Update.NewImage.Domain.Or("")), pushId, now.UnixTimeSeconds);
                 await _queueDb.SortedSetAddAsync(RedisNamespacer.Pushes.Timestamps.Repo(push.Target.GitRemoteUrl), pushId, now.UnixTimeSeconds);
             }
-            await _queueDb.SetRemoveAsync(RedisNamespacer.Pushes.Queue, keys);
-            foreach (var key in keys)
+
+            var pushKeys = pushes.Select(p => (RedisValue)RedisNamespacer.Pushes.Push(p.Target.ToString())).ToArray();
+            await _queueDb.SetRemoveAsync(RedisNamespacer.Pushes.Queue, pushKeys);
+            foreach (var key in pushKeys)
                 await _queueDb.KeyDeleteAsync(key.ToString());
+
+            var deadletterKeys = deadletters.Select(p => (RedisValue)RedisNamespacer.Pushes.Push(p.Push.Target.ToString())).ToArray();
+            await _queueDb.SetRemoveAsync(RedisNamespacer.Pushes.Queue, deadletterKeys);
+            foreach (var deadletter in deadletters)
+            {
+                var target = deadletter.Push.Target.ToString();
+                var pushKey = RedisNamespacer.Pushes.Push(target);
+                var deadLetterKey = RedisNamespacer.Pushes.DeadLetters.DeadLetter(target);
+                await _queueDb.StringSetAsync(deadLetterKey, JsonConvert.SerializeObject(deadletter, SerializationConstants.SerializerSettings));
+                await _queueDb.SetAddAsync(RedisNamespacer.Pushes.DeadLetters.Queue, deadLetterKey);
+                await _queueDb.KeyDeleteAsync(pushKey);
+            }
         }
 
         private async Task ProcessPushesAsync(CancellationToken? cancellationToken = default)
@@ -119,9 +132,9 @@ namespace Talos.Renovate.Services
                         break;
                     try
                     {
-                        await imageUpdaterService.PushUpdates(host, repository, allowedPushes, cancellationToken);
-                        await CompletePushesAsync(allowedPushes, now);
-                        _logger.LogInformation("Processed {Count} pushes for remote {Remote}", allowedPushes.Count, repository.NormalizedUrl);
+                        var (success, deadletters) = await imageUpdaterService.PushUpdates(host, repository, allowedPushes, cancellationToken);
+                        await CompletePushesAsync(success, deadletters, now);
+                        _logger.LogInformation("Processed {Count} pushes and {DeadLetters} deadletters for remote {Remote}", success.Count, deadletters.Count, repository.NormalizedUrl);
                     }
                     catch (Exception ex) when (ex is not TaskCanceledException)
                     {

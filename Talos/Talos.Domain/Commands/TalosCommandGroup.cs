@@ -6,6 +6,7 @@ using Talos.Domain.Abstractions;
 using Talos.Domain.Models;
 using Talos.Domain.Models.DiscordEmbedSocket;
 using Talos.Domain.Services;
+using Talos.Renovate.Abstractions;
 
 namespace Talos.Domain.Commands
 {
@@ -14,6 +15,7 @@ namespace Talos.Domain.Commands
         IOptions<ApiSettings> apiSettings,
         IWebHookAuthenticationService webhookService,
         IDockerClientFactory dockerClientFactory,
+        IPushQueueMutator pushQueueMutator,
         IDiscordCommandProcessRegistry processRegistry)
         : InteractionModuleBase<SocketInteractionContext>, IDiscordEmbedSocketConnector
     {

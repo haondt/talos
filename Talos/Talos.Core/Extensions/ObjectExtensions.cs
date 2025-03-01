@@ -1,6 +1,6 @@
 ﻿using Haondt.Core.Models;
 
-namespace Talos.Api.Extensions
+namespace Talos.Core.Extensions
 {
     public static class ObjectExtensions
     {

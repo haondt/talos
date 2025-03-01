@@ -27,6 +27,8 @@ namespace Talos.Discord.Extensions
                 });
             });
             services.AddSingleton<IInteractionServiceHandler, InteractionServiceHandler>();
+            services.AddSingleton<DiscordClientState>();
+            services.AddHostedService<ExternalDiscordEventChannelListener>();
             return services;
         }
 

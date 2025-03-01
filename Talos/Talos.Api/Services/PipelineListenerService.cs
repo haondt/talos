@@ -1,7 +1,7 @@
 ﻿
 using Haondt.Core.Models;
-using Talos.Api.Extensions;
 using Talos.Api.Models;
+using Talos.Core.Extensions;
 using Talos.Renovate.Abstractions;
 using Talos.Renovate.Models;
 

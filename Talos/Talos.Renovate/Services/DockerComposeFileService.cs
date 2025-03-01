@@ -1,3 +1,4 @@
+using Haondt.Core.Models;
 using Microsoft.Extensions.FileSystemGlobbing;
 using Microsoft.Extensions.FileSystemGlobbing.Abstractions;
 using Microsoft.Extensions.Logging;
@@ -9,7 +10,7 @@ namespace Talos.Renovate.Services
 {
     public class DockerComposeFileService(ILogger<DockerComposeFileService> _logger) : IDockerComposeFileService
     {
-        public string SetServiceImage(
+        public (string NewFileContents, Optional<string> PreviousImageString) SetServiceImage(
             string fileContents, string serviceName, string image)
         {
             var lines = fileContents.Split(Environment.NewLine);
@@ -20,6 +21,7 @@ namespace Talos.Renovate.Services
             var success = false;
             var foundImageField = false;
             var foundTargetService = false;
+            var previousImageString = new Optional<string>();
             foreach (var line in lines)
             {
                 if (success)
@@ -71,19 +73,21 @@ namespace Talos.Renovate.Services
                 }
 
                 foundTargetService = true;
-                if (!Regex.IsMatch(line, @"^    image:\s*[^&*#\s]\S+\s*$"))
+                var previousImageMatch = Regex.Match(line, @"^    image:\s*(?<image>[^&*#\s]\S+)\s*$");
+                if (!previousImageMatch.Success)
                 {
                     outputLines.Add(line);
                     continue;
                 }
 
+                previousImageString = previousImageMatch.Groups["image"].Value;
                 outputLines.Add($"    image: {image}");
                 success = true;
                 foundImageField = true;
             }
 
             if (success)
-                return string.Join(Environment.NewLine, outputLines);
+                return (string.Join(Environment.NewLine, outputLines), previousImageString);
 
             if (!foundTargetService)
                 throw new ArgumentException($"Couldn't find service '{serviceName}'");
@@ -157,5 +161,6 @@ namespace Talos.Renovate.Services
 
             return images;
         }
+
     }
 }

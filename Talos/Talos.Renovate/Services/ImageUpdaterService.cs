@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using StackExchange.Redis;
 using System.Text;
 using System.Text.RegularExpressions;
+using Talos.Core.Extensions;
 using Talos.Core.Models;
 using Talos.Integration.Command.Exceptions;
 using Talos.Renovate.Abstractions;
@@ -108,7 +109,7 @@ namespace Talos.Renovate.Services
             {
                 try
                 {
-                    await _pushQueue.UpsertAndEnqueuePush(push);
+                    await _pushQueue.UpsertAndEnqueuePushAsync(push);
                 }
                 catch (Exception ex)
                 {
@@ -127,7 +128,7 @@ namespace Talos.Renovate.Services
             return (hostConfiguration, repositoryConfiguration);
         }
 
-        public async Task PushUpdates(HostConfiguration host, RepositoryConfiguration repositoryConfiguration, List<ScheduledPush> scheduledPushes, CancellationToken? cancellationToken = null)
+        public async Task<(List<ScheduledPush> SuccessfulPushes, List<ScheduledPushDeadLetter> FailedPushes)> PushUpdates(HostConfiguration host, RepositoryConfiguration repositoryConfiguration, List<ScheduledPush> scheduledPushes, CancellationToken? cancellationToken = null)
         {
             using var repoDir = await _git.CloneAsync(host, repositoryConfiguration);
 
@@ -136,71 +137,111 @@ namespace Talos.Renovate.Services
             if (repositoryConfiguration.CreateMergeRequestsForPushes)
                 await _git.CreateAndCheckoutBranch(repoDir.Path, GetUpdatesBranchName(targetBranchName));
 
+            var deadletters = new List<ScheduledPushDeadLetter>();
+            var stagedPushes = new List<ScheduledPush>();
+
             foreach (var push in scheduledPushes)
             {
-                var filePath = Path.Combine(repoDir.Path, push.Target.RelativeFilePath);
-                var content = File.ReadAllText(filePath);
-                var updatedContent = _dockerComposeFileService.SetServiceImage(content, push.Target.ServiceKey, push.Update.NewImage.ToString());
-                File.WriteAllText(filePath, updatedContent);
-            }
-
-            var commitTitle = "[Talos] Updating images";
-            var commitDescriptionSb = new StringBuilder();
-            foreach (var grp in scheduledPushes.GroupBy(q => q.Target.RelativeFilePath))
-            {
-                commitDescriptionSb.AppendLine(grp.Key);
-                foreach (var push in grp)
-                    commitDescriptionSb.AppendLine($"  {push.Target.ServiceKey}: {push.Update.PreviousImage.ToShortString()} -> {push.Update.NewImage.ToShortString()}");
-            }
-            var commit = await _git.Commit(repoDir.Path, commitTitle, description: commitDescriptionSb.ToString(), all: true);
-            await _redis.SetAddAsync(RedisNamespacer.Git.Commits, commit);
-
-            var gitHost = gitHostServiceProvider.GetGitHost(host);
-            if (repositoryConfiguration.CreateMergeRequestsForPushes)
-            {
-                var updateBranchName = GetUpdatesBranchName(targetBranchName);
-                _logger.LogInformation("Creating merge request for push. I will use updates branch {Branch} and target branch {Target}", updateBranchName, targetBranchName);
-                await _git.PushAsync(host, repositoryConfiguration, repoDir.Path, updateBranchName, force: true);
-                if (!await gitHost.HasOpenMergeRequestsForBranch(repositoryConfiguration, updateBranchName, cancellationToken))
+                try
                 {
-                    _logger.LogInformation("No open merge request(s) for {Branch} found, I will create a new one", updateBranchName);
-                    var mergeRequestUrl = await gitHost.CreateMergeRequestForBranch(repositoryConfiguration, host, updateBranchName, targetBranchName, cancellationToken);
-                    _logger.LogInformation("Created a merge request at {MergeRequestUrl}", mergeRequestUrl);
+
+                    var filePath = Path.Combine(repoDir.Path, push.Target.RelativeFilePath);
+                    if (!File.Exists(filePath))
+                    {
+                        deadletters.Add(new(push, $"Could not find file at {push.Target.RelativeFilePath}"));
+                        continue;
+                    }
+                    var content = File.ReadAllText(filePath);
+                    var (updatedContent, previousImageString) = _dockerComposeFileService.SetServiceImage(content, push.Target.ServiceKey, push.Update.NewImage.ToString());
+                    if (!previousImageString.HasValue)
+                    {
+                        deadletters.Add(new(push, $"Could not find target at {push.Target.RelativeFilePath}:{push.Target.ServiceKey}"));
+                        continue;
+                    }
+                    if (previousImageString.Equals(push.Update.PreviousImage.ToString()))
+                    {
+                        deadletters.Add(new(push, $"Expected previous image {push.Update.PreviousImage.ToString()} does not match the actual previous image {previousImageString}"));
+                        continue;
+                    }
+
+                    File.WriteAllText(filePath, updatedContent);
+                    stagedPushes.Add(push);
+                }
+                catch (Exception ex)
+                {
+                    deadletters.Add(new(push, ex.Message, ex.StackTrace.AsOptional()));
+                }
+            }
+
+
+            if (stagedPushes.Count == 0)
+                return ([], deadletters);
+
+            try
+            {
+
+                var commitTitle = "[Talos] Updating images";
+                var commitDescriptionSb = new StringBuilder();
+                foreach (var grp in scheduledPushes.GroupBy(q => q.Target.RelativeFilePath))
+                {
+                    commitDescriptionSb.AppendLine(grp.Key);
+                    foreach (var push in grp)
+                        commitDescriptionSb.AppendLine($"  {push.Target.ServiceKey}: {push.Update.PreviousImage.ToShortString()} -> {push.Update.NewImage.ToShortString()}");
+                }
+                var commit = await _git.Commit(repoDir.Path, commitTitle, description: commitDescriptionSb.ToString(), all: true);
+                await _redis.SetAddAsync(RedisNamespacer.Git.Commits, commit);
+
+                var gitHost = gitHostServiceProvider.GetGitHost(host);
+                if (repositoryConfiguration.CreateMergeRequestsForPushes)
+                {
+                    var updateBranchName = GetUpdatesBranchName(targetBranchName);
+                    _logger.LogInformation("Creating merge request for push. I will use updates branch {Branch} and target branch {Target}", updateBranchName, targetBranchName);
+                    await _git.PushAsync(host, repositoryConfiguration, repoDir.Path, updateBranchName, force: true);
+                    if (!await gitHost.HasOpenMergeRequestsForBranch(repositoryConfiguration, updateBranchName, cancellationToken))
+                    {
+                        _logger.LogInformation("No open merge request(s) for {Branch} found, I will create a new one", updateBranchName);
+                        var mergeRequestUrl = await gitHost.CreateMergeRequestForBranch(repositoryConfiguration, host, updateBranchName, targetBranchName, cancellationToken);
+                        _logger.LogInformation("Created a merge request at {MergeRequestUrl}", mergeRequestUrl);
+                    }
+                    else
+                    {
+                        _logger.LogInformation("Found existing open merge request(s) for {Branch}", updateBranchName);
+                    }
                 }
                 else
                 {
-                    _logger.LogInformation("Found existing open merge request(s) for {Branch}", updateBranchName);
-                }
-            }
-            else
-            {
-                _logger.LogInformation("Pushing updates to {Branch}", targetBranchName);
-                var hasUpstream = await _git.CheckIfHasUpstreamAsync(repoDir.Path);
-                try
-                {
-                    await _git.PushAsync(host, repositoryConfiguration, repoDir.Path, setUpstream: hasUpstream ? null : "origin");
-                }
-                catch (CommandExecutionException ex) when (Regex.IsMatch(ex.Result.StdErr.Or(""), @".*\[rejected\] +[ \S]*\(fetch first\).*"))
-                {
-                    _logger.LogInformation("Received a fetch first error for {Branch}, retrying with a rebase first", targetBranchName);
+                    _logger.LogInformation("Pushing updates to {Branch}", targetBranchName);
+                    var hasUpstream = await _git.CheckIfHasUpstreamAsync(repoDir.Path);
                     try
                     {
-                        await _git.PullAsync(repoDir.Path, rebase: true);
-
+                        await _git.PushAsync(host, repositoryConfiguration, repoDir.Path, setUpstream: hasUpstream ? null : "origin");
                     }
-                    catch (CommandExecutionException ex2) when (Regex.IsMatch(ex2.Result.StdOut.Or(""), @".*\bCONFLICT\b.*\bMerge conflict\b.*"))
+                    catch (CommandExecutionException ex) when (Regex.IsMatch(ex.Result.StdErr.Or(""), @".*\[rejected\] +[ \S]*\(fetch first\).*"))
                     {
-                        _logger.LogError("Failed to rebase branch {Branch} due to merge conflict", targetBranchName);
-                        throw;
+                        _logger.LogInformation("Received a fetch first error for {Branch}, retrying with a rebase first", targetBranchName);
+                        try
+                        {
+                            await _git.PullAsync(repoDir.Path, rebase: true);
+
+                        }
+                        catch (CommandExecutionException ex2) when (Regex.IsMatch(ex2.Result.StdOut.Or(""), @".*\bCONFLICT\b.*\bMerge conflict\b.*"))
+                        {
+                            _logger.LogError("Failed to rebase branch {Branch} due to merge conflict", targetBranchName);
+                            throw;
+                        }
+                        await _git.PushAsync(host, repositoryConfiguration, repoDir.Path, setUpstream: hasUpstream ? null : "origin");
                     }
-                    await _git.PushAsync(host, repositoryConfiguration, repoDir.Path, setUpstream: hasUpstream ? null : "origin");
                 }
+            }
+            catch (Exception ex)
+            {
+                return ([], deadletters.Concat(stagedPushes.Select(p => new ScheduledPushDeadLetter(p, $"Exception thrown during git operations: {ex.Message}", ex.StackTrace.AsOptional()))).ToList());
             }
 
             // since we have already pushed the change, we can't really fail out of this
             // the cache will reach consistency with the upstream on subsequent runs so
             // we can safely discard these errors
-            foreach (var push in scheduledPushes)
+            foreach (var push in stagedPushes)
             {
                 try
                 {
@@ -211,6 +252,7 @@ namespace Talos.Renovate.Services
                     _logger.LogError(ex, "Ran into exception while completing push for push {Push}: {ExceptionMessage}", push.Target.ToString(), ex.Message);
                 }
             }
+            return (stagedPushes, deadletters);
         }
 
     }

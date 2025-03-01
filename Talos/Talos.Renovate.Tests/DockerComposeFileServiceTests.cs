@@ -116,7 +116,7 @@ volumes:
   vol1:
   vol2:
 ";
-            var outputYaml = GetSut().SetServiceImage(originalYaml, "app", "newimage:newtag");
+            var (outputYaml, _) = GetSut().SetServiceImage(originalYaml, "app", "newimage:newtag");
             outputYaml.Should().Be(expectedYaml);
         }
 
@@ -192,7 +192,7 @@ x-yet-another-thing:
   app3:
     image: foo
 ";
-            var outputYaml = GetSut().SetServiceImage(originalYaml, "app", "bar");
+            var (outputYaml, _) = GetSut().SetServiceImage(originalYaml, "app", "bar");
             outputYaml.Should().Be(expectedYaml);
         }
 
@@ -230,7 +230,7 @@ x-other:
   app:
     image: bar
 ";
-            var outputYaml = GetSut().SetServiceImage(originalYaml, "app", "bar");
+            var (outputYaml, _) = GetSut().SetServiceImage(originalYaml, "app", "bar");
             outputYaml.Should().Be(expectedYaml);
         }
 
@@ -290,7 +290,7 @@ x-other:
             if (shouldSucceed)
             {
 
-                var outputYaml = GetSut().SetServiceImage(originalYaml, "app", "bar");
+                var (outputYaml, _) = GetSut().SetServiceImage(originalYaml, "app", "bar");
                 outputYaml.Should().Be(expectedYaml);
             }
             else
@@ -418,8 +418,8 @@ volumes:
 
 ";
 
-            var outputYaml = GetSut().SetServiceImage(originalYaml, "elysium-stage", "registry.gitlab.com/haondt/cicd/registry/elysium:0.1.0@sha256:ab42ae6871d9a12b90c7a259f808aade4d84496317a7e38621d7ebca07fc02f6");
-            outputYaml = GetSut().SetServiceImage(outputYaml, "elysium-stage-silo", "registry.gitlab.com/haondt/cicd/registry/elysium-silo:0.1.0@sha256:ab42ae6871d9a12b90c7a259f808aade4d84496317a7e38621d7ebca07fc02f6");
+            var (outputYaml, _) = GetSut().SetServiceImage(originalYaml, "elysium-stage", "registry.gitlab.com/haondt/cicd/registry/elysium:0.1.0@sha256:ab42ae6871d9a12b90c7a259f808aade4d84496317a7e38621d7ebca07fc02f6");
+            (outputYaml, _) = GetSut().SetServiceImage(outputYaml, "elysium-stage-silo", "registry.gitlab.com/haondt/cicd/registry/elysium-silo:0.1.0@sha256:ab42ae6871d9a12b90c7a259f808aade4d84496317a7e38621d7ebca07fc02f6");
             outputYaml.Should().Be(expectedYaml);
         }
     }

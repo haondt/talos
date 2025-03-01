@@ -14,6 +14,12 @@
 
             public static readonly string Queue = $"{Segment}:queue";
             public static string Push(string id) => $"{Segment}:push:{id}";
+            public static class DeadLetters
+            {
+                private static readonly string Segment = $"{Pushes.Segment}:deadletters";
+                public static string DeadLetter(string id) => $"{Segment}:deadletter:{id}";
+                public static readonly string Queue = $"{Segment}:queue";
+            }
         }
 
         public static string UpdateTarget(string id) => $"target:{id}";

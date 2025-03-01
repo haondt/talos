@@ -13,17 +13,20 @@ namespace Talos.Discord.Services;
 public class DiscordBot : BackgroundService
 {
     private readonly DiscordSocketClient _client;
+    private readonly DiscordClientState _clientState;
     private readonly IInteractionServiceHandler _interactionService;
     private readonly ILogger<DiscordBot> _logger;
     private readonly DiscordSettings _settings;
 
     public DiscordBot(
         DiscordSocketClient client,
+        DiscordClientState clientState,
         IOptions<DiscordSettings> discordSettings,
         IInteractionServiceHandler interactionService,
         ILogger<DiscordBot> logger)
     {
         _client = client;
+        _clientState = clientState;
         _interactionService = interactionService;
         _logger = logger;
         _settings = discordSettings.Value;
@@ -38,6 +41,8 @@ public class DiscordBot : BackgroundService
         _logger.LogInformation("Syncing commands...");
         await _interactionService.OnReadyAsync();
         _logger.LogInformation("Command list synced.");
+
+        _clientState.SignalStart();
     }
 
     private Task LogAsync(LogMessage logMessage)
@@ -48,8 +53,17 @@ public class DiscordBot : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await _client.LoginAsync(TokenType.Bot, _settings.BotToken);
-        await _client.StartAsync();
+        try
+        {
+
+            await _client.LoginAsync(TokenType.Bot, _settings.BotToken);
+            await _client.StartAsync();
+        }
+        catch
+        {
+            await _clientState.SignalShutdown();
+            throw;
+        }
 
         try
         {
@@ -57,6 +71,7 @@ public class DiscordBot : BackgroundService
         }
         finally
         {
+            await _clientState.SignalShutdown();
             await _client.StopAsync();
             await _client.LogoutAsync();
         }

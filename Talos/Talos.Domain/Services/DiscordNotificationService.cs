@@ -1,4 +1,5 @@
-﻿using Talos.Renovate.Abstractions;
+﻿using Talos.Discord.Services;
+using Talos.Renovate.Abstractions;
 using Talos.Renovate.Models;
 
 namespace Talos.Domain.Services
@@ -22,7 +23,7 @@ namespace Talos.Domain.Services
 
         public Task Notify(PipelineCompletionEvent pipelineCompleted)
         {
-            return Task.CompletedTask;
+            return ExternalDiscordEventChannelProvider.NotificationChannel.Writer.WriteAsync(new()).AsTask();
         }
     }
 }

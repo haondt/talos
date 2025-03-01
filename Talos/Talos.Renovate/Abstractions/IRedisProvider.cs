@@ -6,5 +6,6 @@ namespace Talos.Renovate.Abstractions
     {
 
         IDatabase GetDatabase(int db = -1);
+        IServer GetServer();
     }
 }
