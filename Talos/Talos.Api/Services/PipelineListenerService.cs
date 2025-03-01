@@ -1,5 +1,6 @@
 ﻿
 using Haondt.Core.Models;
+using Talos.Api.Extensions;
 using Talos.Api.Models;
 using Talos.Renovate.Abstractions;
 using Talos.Renovate.Models;
@@ -55,6 +56,8 @@ namespace Talos.Api.Services
                 {
                     CommitShortSha = pipelineEvent.Commit.TruncatedId,
                     CommitUrl = pipelineEvent.Commit.Url,
+                    CommitTitle = pipelineEvent.Commit.Title.AsOptional(),
+                    CommitMessage = pipelineEvent.Commit.Message.AsOptional(),
                     Duration = pipelineEvent.ObjectAttributes.Duration.HasValue
                         ? TimeSpan.FromSeconds(pipelineEvent.ObjectAttributes.Duration.Value)
                         : new Optional<TimeSpan>(),

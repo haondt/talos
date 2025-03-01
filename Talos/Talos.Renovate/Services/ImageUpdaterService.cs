@@ -150,7 +150,7 @@ namespace Talos.Renovate.Services
             {
                 commitDescriptionSb.AppendLine(grp.Key);
                 foreach (var push in grp)
-                    commitDescriptionSb.AppendLine($"  {push.Target.ServiceKey}: {push.Update.PreviousImage} -> {push.Update.NewImage}");
+                    commitDescriptionSb.AppendLine($"  {push.Target.ServiceKey}: {push.Update.PreviousImage.ToShortString()} -> {push.Update.NewImage.ToShortString()}");
             }
             var commit = await _git.Commit(repoDir.Path, commitTitle, description: commitDescriptionSb.ToString(), all: true);
             await _redis.SetAddAsync(RedisNamespacer.Git.Commits, commit);

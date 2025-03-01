@@ -143,6 +143,22 @@ namespace Talos.Renovate.Models
                 sb.Append(':' + TagAndDigest.Value.ToString());
             return sb.ToString();
         }
+
+        public string ToShortString()
+        {
+            var sb = new StringBuilder(Name);
+            if (!TagAndDigest.HasValue)
+                return sb.ToString();
+            sb.Append(':' + TagAndDigest.Value.Tag.ToString());
+            if (TagAndDigest.Value.Digest.HasValue)
+            {
+                if (TagAndDigest.Value.Digest.Value.StartsWith("sha256:"))
+                    sb.Append(string.Concat("@", TagAndDigest.Value.Digest.Value.AsSpan("sha256:".Length, 8)));
+                else
+                    sb.Append(string.Concat("@", TagAndDigest.Value.Digest.Value.AsSpan(0, 8)));
+            }
+            return sb.ToString();
+        }
     }
 
     public readonly record struct ParsedTagAndDigest(

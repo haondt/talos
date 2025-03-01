@@ -9,6 +9,8 @@ namespace Talos.Renovate.Models
 
         public required string CommitShortSha { get; set; }
         public required string CommitUrl { get; set; }
+        public Optional<string> CommitTitle { get; set; }
+        public Optional<string> CommitMessage { get; set; }
 
         public PipelineStatus Status { get; set; }
 
