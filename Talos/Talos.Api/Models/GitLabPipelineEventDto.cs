@@ -27,6 +27,8 @@ namespace Talos.Api.Models
 
         public required string Id { get; set; }
         public required string GitHttpUrl { get; set; }
+        [JsonRequired]
+        public required string PathWithNamespace { get; set; }
     }
 
     public class GitLabObjectAttributesDto

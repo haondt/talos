@@ -52,16 +52,23 @@ namespace Talos.Api.Services
 
             try
             {
+                var commitMessage = pipelineEvent.Commit.Message.AsOptional();
+                if (!string.IsNullOrEmpty(pipelineEvent.Commit.Message))
+                    if (!string.IsNullOrEmpty(pipelineEvent.Commit.Title))
+                        if (pipelineEvent.Commit.Message.StartsWith(pipelineEvent.Commit.Title))
+                            commitMessage = pipelineEvent.Commit.Message[pipelineEvent.Commit.Title.Length..];
+
                 await notificationService.Notify(new PipelineCompletionEvent
                 {
+                    RepositorySlug = pipelineEvent.Project.PathWithNamespace,
                     CommitShortSha = pipelineEvent.Commit.TruncatedId,
                     CommitUrl = pipelineEvent.Commit.Url,
                     CommitTitle = pipelineEvent.Commit.Title.AsOptional(),
-                    CommitMessage = pipelineEvent.Commit.Message.AsOptional(),
+                    CommitMessage = commitMessage,
                     Duration = pipelineEvent.ObjectAttributes.Duration.HasValue
                         ? TimeSpan.FromSeconds(pipelineEvent.ObjectAttributes.Duration.Value)
                         : new Optional<TimeSpan>(),
-                    Id = pipelineEvent.ObjectAttributes.Id,
+                    Id = $"#{pipelineEvent.ObjectAttributes.Id}",
                     Status = pipelineEvent.IsSuccess
                         ? PipelineStatus.Success
                         : PipelineStatus.Failed,

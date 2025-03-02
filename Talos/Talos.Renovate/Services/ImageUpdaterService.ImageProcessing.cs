@@ -7,6 +7,26 @@ namespace Talos.Renovate.Services
 {
     public partial class ImageUpdaterService
     {
+        private void LogTrace(ImageUpdateTrace trace)
+        {
+
+            var scope = new Dictionary<string, object>
+            {
+                ["Resolution"] = trace.Resolution,
+            };
+            if (!string.IsNullOrEmpty(trace.DesiredImage))
+                scope["DesiredImage"] = trace.DesiredImage;
+            if (trace.DesiredImageCreatedOn.HasValue)
+                scope["DesiredImageCreatedOn"] = trace.DesiredImageCreatedOn.Value.UtcTime.ToString("s");
+            if (!string.IsNullOrEmpty(trace.CachedImage))
+                scope["CachedImage"] = trace.CachedImage;
+            if (trace.CachedImageCreatedOn.HasValue)
+                scope["CachedImageCreatedOn"] = trace.CachedImageCreatedOn.Value.UtcTime.ToString("s");
+
+            using (_logger.BeginScope(scope))
+
+                _logger.LogInformation("Processed image update {CurrentImage}", trace.CurrentImage);
+        }
         private async Task<Optional<ScheduledPush>> ProcessService(ImageUpdateIdentity id, TalosSettings configuration, string image)
         {
             var cached = await TryGetImageUpdateDataAsync(id);
@@ -22,8 +42,7 @@ namespace Talos.Renovate.Services
             var target = await SelectUpdateTarget(image, configuration.Bump);
             if (!target.HasValue)
             {
-                // todo: make this get serialized as fields on the json payload
-                _logger.LogInformation("Processed image update {trace}", new ImageUpdateTrace
+                LogTrace(new ImageUpdateTrace()
                 {
                     Resolution = "Skipped due to image already being up to date",
                     CurrentImage = image,
@@ -40,26 +59,6 @@ namespace Talos.Renovate.Services
                 _ => throw new ArgumentException($"Unknown {nameof(BumpStrategy)} {target.Value.BumpSize}")
             };
 
-            void logTrace(ImageUpdateTrace trace)
-            {
-
-                var scope = new Dictionary<string, object>
-                {
-                    ["Resolution"] = trace.Resolution,
-                };
-                if (!string.IsNullOrEmpty(trace.DesiredImage))
-                    scope["DesiredImage"] = trace.DesiredImage;
-                if (trace.DesiredImageCreatedOn.HasValue)
-                    scope["DesiredImageCreatedOn"] = trace.DesiredImageCreatedOn.Value.UtcTime.ToString("s");
-                if (!string.IsNullOrEmpty(trace.CachedImage))
-                    scope["CachedImage"] = trace.CachedImage;
-                if (trace.CachedImageCreatedOn.HasValue)
-                    scope["CachedImageCreatedOn"] = trace.CachedImageCreatedOn.Value.UtcTime.ToString("s");
-
-                using (_logger.BeginScope(scope))
-
-                    _logger.LogInformation("Processed image update {CurrentImage}", trace.CurrentImage);
-            }
 
             switch (strategy)
             {
@@ -80,7 +79,7 @@ namespace Talos.Renovate.Services
 
                                 if (target.Value.NewImageCreatedOn <= cached.Value.Interaction.PendingImageCreatedOn)
                                 {
-                                    logTrace(new ImageUpdateTrace
+                                    LogTrace(new ImageUpdateTrace
                                     {
                                         Resolution = "Skipped due to newer pending version",
                                         DesiredImage = target.Value.NewImage.ToString(),
@@ -113,7 +112,7 @@ namespace Talos.Renovate.Services
                         };
 
                         await SetImageUpdateDataAsync(id, updateData);
-                        logTrace(new ImageUpdateTrace
+                        LogTrace(new ImageUpdateTrace
                         {
                             Resolution = "Created or replace interaction for pending image",
                             DesiredImage = target.Value.NewImage.ToString(),
@@ -131,7 +130,7 @@ namespace Talos.Renovate.Services
                         {
                             if (cached.Value.LastNotified?.CreatedOn >= target.Value.NewImageCreatedOn)
                             {
-                                logTrace(new ImageUpdateTrace
+                                LogTrace(new ImageUpdateTrace
                                 {
                                     Resolution = "Skipping notification due to having already notified of newer version",
                                     DesiredImage = target.Value.NewImage.ToString(),
@@ -152,7 +151,7 @@ namespace Talos.Renovate.Services
                             };
                             if (cached.Value.LastNotified?.CreatedOn >= target.Value.NewImageCreatedOn)
                             {
-                                logTrace(new ImageUpdateTrace
+                                LogTrace(new ImageUpdateTrace
                                 {
                                     Resolution = "Skipping notification due to having already notified of newer version",
                                     DesiredImage = target.Value.NewImage.ToString(),
@@ -166,7 +165,7 @@ namespace Talos.Renovate.Services
                         }
                         else
                         {
-                            cached = new(new()
+                            cached = new ImageUpdateData()
                             {
                                 Image = image,
                                 LastNotified = new()
@@ -174,11 +173,12 @@ namespace Talos.Renovate.Services
                                     CreatedOn = target.Value.NewImageCreatedOn,
                                     Image = target.Value.NewImage.ToString()
                                 }
-                            });
+                            };
                         }
 
                         await _notificationService.Notify(target.Value);
-                        logTrace(new ImageUpdateTrace
+                        await SetImageUpdateDataAsync(id, cached.Value!);
+                        LogTrace(new ImageUpdateTrace
                         {
                             Resolution = "Notified about available update",
                             DesiredImage = target.Value.NewImage.ToString(),
@@ -188,7 +188,7 @@ namespace Talos.Renovate.Services
                         return new();
                     }
                 case BumpStrategy.Skip:
-                    logTrace(new ImageUpdateTrace
+                    LogTrace(new ImageUpdateTrace
                     {
                         Resolution = $"Skipped due to {nameof(BumpStrategy)}.{BumpStrategy.Skip} strategy configuration",
                         CurrentImage = image,

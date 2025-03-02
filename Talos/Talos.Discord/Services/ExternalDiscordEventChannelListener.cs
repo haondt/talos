@@ -1,5 +1,4 @@
-﻿using Discord;
-using Discord.WebSocket;
+﻿using Discord.WebSocket;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -66,15 +65,7 @@ namespace Talos.Discord.Services
                 return;
             }
 
-            var embed = new EmbedBuilder()
-                .WithDescription("desc")
-                .WithTitle("test")
-                .WithAuthor("ur mom")
-                .Build();
-
-
-            //string message = $"New Notification: {notification.EventName}\n{notification.Payload}";
-            await channel.SendMessageAsync(embed: embed);
+            await channel.SendMessageAsync(embed: next.Embed);
         }
 
     }
