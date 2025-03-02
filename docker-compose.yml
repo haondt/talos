@@ -12,7 +12,6 @@ services:
     environment:
       ApiSettings__BaseUrl: http://localhost:2222
       RedisSettings__Endpoint: talos-redis:6379
-      # ImageUpdateSettings__Hosts__haondt-gitlab__Token: $GITLAB_PERSONAL_ACCESS_TOKEN
   talos-redis:
     networks:
       - talos

@@ -32,7 +32,8 @@ ARG BUILD_CONFIGURATION=Release
 RUN dotnet publish "./Talos.Api.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
 FROM base AS final
-USER app
+RUN useradd -m -s /bin/bash talos
+USER talos
 WORKDIR /app
 COPY --from=publish /app/publish .
 ENTRYPOINT ["dotnet", "Talos.Api.dll"]
