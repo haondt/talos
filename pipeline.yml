@@ -1,0 +1,14 @@
+tasks:
+  - type: docker-build
+    image: talos
+    auto:
+      - source: push
+        has_tag: true
+        tag_source: tag
+      - source: push
+        has_tag: true
+        tag_source: latest
+    context: Talos
+    file: Talos/Talos.Api/Dockerfile
+    registries:
+      - gitlab

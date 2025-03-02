@@ -1,7 +1,23 @@
 services:
   talos:
-    image: talos
+    build:
+      context: ./Talos
+      dockerfile: ./Talos.Api/Dockerfile
+    networks:
+      - talos
+    ports:
+      - 2222:8080
+    volumes:
+      - ./Talos/Talos.Api/appsettings.Development.json:/app/appsettings.Production.json:ro
     environment:
-      GITLAB_PERSONAL_ACCESS_TOKEN: mytoken
-      ImageUpdateSettings__Hosts__haondt-gitlab__Token: $GITLAB_PERSONAL_ACCESS_TOKEN
-      ImageUpdateSettings__Hosts__haondt-gitlab__Type: GitLab
+      ApiSettings__BaseUrl: http://localhost:2222
+      RedisSettings__Endpoint: talos-redis:6379
+      # ImageUpdateSettings__Hosts__haondt-gitlab__Token: $GITLAB_PERSONAL_ACCESS_TOKEN
+  talos-redis:
+    networks:
+      - talos
+    container_name: talos-redis
+    image: redis
+
+networks:
+  talos:
