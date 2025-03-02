@@ -13,7 +13,7 @@ namespace Talos.Domain.Services
         IRedisProvider redisProvider) : IWebHookAuthenticationService
     {
         private const int API_KEY_LENGTH_BITS = 512;
-        private readonly IDatabase _redis = redisProvider.GetDatabase(redisSettings.Value.DefaultDatabaase);
+        private readonly IDatabase _redis = redisProvider.GetDatabase(redisSettings.Value.DefaultDatabase);
         private readonly SemaphoreSlim _lock = new(1, 1);
 
         public async Task<string> GenerateApiTokenAsync(string name)

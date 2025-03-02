@@ -23,7 +23,8 @@ namespace Talos.Renovate.Services
         IGitHostServiceProvider gitHostServiceProvider,
         IDockerComposeFileService _dockerComposeFileService,
         IGitService _git,
-        IPushQueueMutator _pushQueue) : IImageUpdaterService
+        IPushQueueMutator _pushQueue,
+        IImageUpdateDataRepository updateDataRepository) : IImageUpdaterService
     {
         private int _isRunning = 0;
 

@@ -19,7 +19,8 @@ namespace Talos.Domain.Extensions
 
             services.RegisterInteraction<TalosCommandGroup>();
             services.AddSingleton<IDiscordCommandProcessRegistry, DiscordCommandProcessRegistry>();
-            services.AddSingleton<INotificationService, DiscordNotificationService>();
+            services.AddSingleton<IDiscordNotificationService, DiscordNotificationService>();
+            services.AddSingleton<INotificationService>(sp => sp.GetRequiredService<IDiscordNotificationService>());
             services.AddSingleton<IWebHookAuthenticationService, WebhookAuthenticationService>();
             services.Configure<ApiSettings>(configuration.GetSection(nameof(ApiSettings)));
             return services;

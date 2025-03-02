@@ -14,6 +14,7 @@ namespace Talos.Renovate.Extensions
         {
             services.AddSingleton<ISkopeoService, SkopeoService>();
             services.AddSingleton<IImageUpdaterService, ImageUpdaterService>();
+            services.AddSingleton<IImageUpdateDataRepository, ImageUpdateDataRepository>();
             services.AddSingleton<IDockerComposeFileService, DockerComposeFileService>();
             services.Configure<ImageUpdateSettings>(configuration.GetSection(nameof(ImageUpdateSettings)));
             ImageUpdateSettings.Validate(services.AddOptions<ImageUpdateSettings>()).ValidateOnStart();
@@ -24,7 +25,7 @@ namespace Talos.Renovate.Extensions
             {
                 var redisSettings = sp.GetRequiredService<IOptions<RedisSettings>>();
                 var cm = ConnectionMultiplexer.Connect(redisSettings.Value.Endpoint);
-                return new RedisProvider(cm);
+                return new RedisProvider(cm, redisSettings.Value.DefaultDatabase);
             });
 
             services.AddSingleton<IGitHostServiceProvider, GitHostServiceProvider>();
@@ -34,7 +35,7 @@ namespace Talos.Renovate.Extensions
             services.Configure<GitSettings>(configuration.GetSection(nameof(GitSettings)));
             services.AddSingleton<IPushQueueMutator, PushQueueMutator>();
             services.Configure<UpdateThrottlingSettings>(configuration.GetSection(nameof(UpdateThrottlingSettings)));
-            services.AddHostedService<UpdateQueueListener>();
+            services.AddHostedService<PushQueueListener>();
             services.AddHostedService<ImageUpdateBackgroundService>();
 
 

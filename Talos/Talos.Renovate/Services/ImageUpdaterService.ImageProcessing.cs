@@ -29,13 +29,13 @@ namespace Talos.Renovate.Services
         }
         private async Task<Optional<ScheduledPush>> ProcessService(ImageUpdateIdentity id, TalosSettings configuration, string image)
         {
-            var cached = await TryGetImageUpdateDataAsync(id);
+            var cached = await updateDataRepository.TryGetImageUpdateDataAsync(id);
             if (cached.HasValue && cached.Value.Image != image)
             {
                 var interactionId = cached.Value.Interaction?.InteractionId;
                 if (interactionId != null)
                     await _notificationService.DeleteInteraction(interactionId);
-                await ClearImageUpdateDataCacheAsync(id);
+                await updateDataRepository.ClearImageUpdateDataCacheAsync(id);
                 cached = new();
             }
 
@@ -99,7 +99,7 @@ namespace Talos.Renovate.Services
                                 }
                             }
                         }
-                        var interactionId = await _notificationService.CreateInteraction(target.Value);
+                        var interactionId = await _notificationService.CreateInteractionAsync(id, target.Value);
                         var updateData = new ImageUpdateData
                         {
                             Image = image,
@@ -111,7 +111,7 @@ namespace Talos.Renovate.Services
                             }
                         };
 
-                        await SetImageUpdateDataAsync(id, updateData);
+                        await updateDataRepository.SetImageUpdateDataAsync(id, updateData);
                         LogTrace(new ImageUpdateTrace
                         {
                             Resolution = "Created or replace interaction for pending image",
@@ -177,7 +177,7 @@ namespace Talos.Renovate.Services
                         }
 
                         await _notificationService.Notify(target.Value);
-                        await SetImageUpdateDataAsync(id, cached.Value!);
+                        await updateDataRepository.SetImageUpdateDataAsync(id, cached.Value!);
                         LogTrace(new ImageUpdateTrace
                         {
                             Resolution = "Notified about available update",
@@ -343,7 +343,7 @@ namespace Talos.Renovate.Services
 
         private async Task CompletePushAsync(ScheduledPush push)
         {
-            var cached = (await TryGetImageUpdateDataAsync(push.Target))
+            var cached = (await updateDataRepository.TryGetImageUpdateDataAsync(push.Target))
                 .As(c =>
                 {
                     c.Image = push.Update.NewImage.ToString();
@@ -367,7 +367,7 @@ namespace Talos.Renovate.Services
                 }
             }
 
-            await SetImageUpdateDataAsync(push.Target, cached);
+            await updateDataRepository.SetImageUpdateDataAsync(push.Target, cached);
         }
     }
 }

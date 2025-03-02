@@ -29,10 +29,7 @@ Log.Logger = new LoggerConfiguration()
     .CreateLogger();
 
 if (builder.Environment.IsDevelopment())
-{
     builder.Configuration.SetBasePath(AppContext.BaseDirectory);
-    Console.WriteLine(AppContext.BaseDirectory);
-}
 
 builder.Configuration.AddEnvironmentVariables();
 builder.Services.AddTalosDiscordServices(builder.Configuration)

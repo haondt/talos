@@ -1,19 +1,22 @@
 ﻿using Haondt.Core.Models;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+using StackExchange.Redis;
 using Talos.Core.Models;
+using Talos.Renovate.Abstractions;
 using Talos.Renovate.Models;
 
 namespace Talos.Renovate.Services
 {
-    public partial class ImageUpdaterService
+    public class ImageUpdateDataRepository(IRedisProvider redisProvider, ILogger<ImageUpdateDataRepository> _logger) : IImageUpdateDataRepository
     {
-        private Task<bool> ClearImageUpdateDataCacheAsync(ImageUpdateIdentity id)
+        private readonly IDatabase _redis = redisProvider.GetDefaultDatabase();
+        public Task<bool> ClearImageUpdateDataCacheAsync(ImageUpdateIdentity id)
         {
             return _redis.KeyDeleteAsync(RedisNamespacer.UpdateTarget(id.ToString()));
         }
 
-        private async Task<Optional<ImageUpdateData>> TryGetImageUpdateDataAsync(ImageUpdateIdentity id)
+        public async Task<Optional<ImageUpdateData>> TryGetImageUpdateDataAsync(ImageUpdateIdentity id)
         {
             var cachedResponse = await _redis.StringGetAsync(RedisNamespacer.UpdateTarget(id.ToString()));
             if (cachedResponse.IsNull)
@@ -28,7 +31,7 @@ namespace Talos.Renovate.Services
             return deserialized;
         }
 
-        private Task<bool> SetImageUpdateDataAsync(ImageUpdateIdentity id, ImageUpdateData data)
+        public Task<bool> SetImageUpdateDataAsync(ImageUpdateIdentity id, ImageUpdateData data)
         {
             var serialized = JsonConvert.SerializeObject(data, SerializationConstants.SerializerSettings)
                 ?? throw new JsonSerializationException($"Failed to serialize image update data for image {id}");

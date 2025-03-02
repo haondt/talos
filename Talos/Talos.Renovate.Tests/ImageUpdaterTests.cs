@@ -22,6 +22,7 @@ namespace Talos.Renovate.Tests
             var mockDockerComposeFileService = new Mock<IDockerComposeFileService>();
             var mockGitService = new Mock<IGitService>();
             var mockQueueMutator = new Mock<IPushQueueMutator>();
+            var mockUpdateDataStorage = new Mock<IImageUpdateDataRepository>();
             return new ImageUpdaterService(
                 Options.Create(new Models.ImageUpdateSettings
                 {
@@ -36,7 +37,9 @@ namespace Talos.Renovate.Tests
                 mockGitHostProvider.Object,
                 mockDockerComposeFileService.Object,
                 mockGitService.Object,
-                mockQueueMutator.Object);
+                mockQueueMutator.Object,
+                mockUpdateDataStorage.Object
+                );
         }
 
         public static IEnumerable<object[]> GetTestData()

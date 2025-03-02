@@ -46,5 +46,22 @@
                 public static string ByValue => $"{Segment}:byvalue";
             }
         }
+
+        public static class Discord
+        {
+            private static readonly string Segment = "discord";
+            public static class Interaction
+            {
+                private static readonly string Segment = $"{Discord.Segment}:interaction";
+
+                public static string ImageUpdate(string id) => $"{Segment}:imageupdate:{id}";
+                public static class Component
+                {
+                    private static readonly string Segment = $"{Interaction.Segment}:component";
+                    public static string Message(string id) => $"{Segment}:message:{id}";
+                }
+            }
+
+        }
     }
 }

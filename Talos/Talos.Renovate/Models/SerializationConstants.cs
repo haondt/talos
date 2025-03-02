@@ -6,7 +6,7 @@ using YamlDotNet.Serialization.NamingConventions;
 
 namespace Talos.Renovate.Models
 {
-    internal class SerializationConstants
+    public class SerializationConstants
     {
         public static JsonSerializerSettings SerializerSettings { get; }
         public static JsonSerializerSettings SkopeoSerializerSettings { get; }

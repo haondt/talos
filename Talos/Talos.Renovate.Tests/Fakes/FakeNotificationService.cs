@@ -5,7 +5,7 @@ namespace Talos.Renovate.Tests.Fakes
 {
     internal class FakeNotificationService : INotificationService
     {
-        public Task<string> CreateInteraction(ImageUpdate update)
+        public Task<string> CreateInteractionAsync(ImageUpdateIdentity id, ImageUpdate update)
         {
             return Task.FromResult(Guid.NewGuid().ToString());
         }

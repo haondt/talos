@@ -2,7 +2,7 @@
 {
     public class RedisSettings
     {
-        public int DefaultDatabaase { get; set; } = 0;
+        public int DefaultDatabase { get; set; } = 0;
         public required string Endpoint { get; set; }
 
     }

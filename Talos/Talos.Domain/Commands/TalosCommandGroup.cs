@@ -16,6 +16,7 @@ namespace Talos.Domain.Commands
         IWebHookAuthenticationService webhookService,
         IDockerClientFactory dockerClientFactory,
         IPushQueueMutator pushQueueMutator,
+        IDiscordNotificationService discordNotificationService,
         IDiscordCommandProcessRegistry processRegistry)
         : InteractionModuleBase<SocketInteractionContext>, IDiscordEmbedSocketConnector
     {
@@ -27,6 +28,12 @@ namespace Talos.Domain.Commands
                 processRegistry.CancelProcess(commandId);
 
             return Task.CompletedTask;
+        }
+
+        [ComponentInteraction($"{DiscordNotificationService.CompleteInteractionPrefix}-*", ignoreGroupNames: true)]
+        public Task CompleteInteractionAsync(string interactionId)
+        {
+            return discordNotificationService.CompleteInteractionAsync(interactionId, Context.Interaction);
         }
 
         Task IDiscordEmbedSocketConnector.DeferAsync(bool ephemeral, RequestOptions? options)

@@ -11,7 +11,7 @@ using Talos.Renovate.Models;
 
 namespace Talos.Renovate.Services
 {
-    public class UpdateQueueListener(IRedisProvider redisProvider,
+    public class PushQueueListener(IRedisProvider redisProvider,
         IOptions<UpdateThrottlingSettings> settings,
         ILogger<PushQueueMutator> _logger,
         IPushQueueMutator _throttlingService,
