@@ -107,9 +107,19 @@ namespace Talos.Domain.Services
                 .WithTimestamp(DateTimeOffset.UtcNow);
         }
 
-        public Task DeleteInteraction(string id)
+        public async Task DeleteInteraction(string id)
         {
-            return Task.CompletedTask;
+            var messageIdKey = RedisNamespacer.Discord.Interaction.ImageUpdate(id);
+            var serialized = await _redis.StringGetAsync(messageIdKey);
+            if (serialized.IsNullOrEmpty)
+                return;
+            var deserialized = JsonConvert.DeserializeObject<DiscordImageUpdateInteractionData>(serialized.ToString(), SerializationConstants.SerializerSettings)
+                ?? throw new JsonSerializationException($"Failed to deserialize {nameof(DiscordImageUpdateInteractionData)} for message {id}");
+
+            await _redis.KeyDeleteAsync(RedisNamespacer.Discord.Interaction.Component.Message(deserialized.PushButtonId));
+            await _redis.KeyDeleteAsync(RedisNamespacer.Discord.Interaction.Component.Message(deserialized.DeferButtonId));
+            await _redis.KeyDeleteAsync(RedisNamespacer.Discord.Interaction.Component.Message(deserialized.IgnoreButtonId));
+            await _redis.KeyDeleteAsync(messageIdKey);
         }
 
         public Task CompleteInteractionAsync(string id, SocketInteraction interaction)
