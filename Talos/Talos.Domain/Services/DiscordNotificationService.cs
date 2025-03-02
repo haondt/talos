@@ -1,7 +1,6 @@
 ﻿using Discord;
 using Discord.WebSocket;
 using Haondt.Core.Extensions;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using StackExchange.Redis;
@@ -21,7 +20,7 @@ namespace Talos.Domain.Services
         IRedisProvider redisProvider,
         IImageUpdateDataRepository updateDataRepository,
         IPushQueueMutator pushQueue,
-        DiscordClientState clientState, ILogger<DiscordNotificationService> logger) : IDiscordNotificationService
+        DiscordClientState clientState) : IDiscordNotificationService
     {
         private readonly IDatabase _redis = redisProvider.GetDefaultDatabase();
         public const string CompleteInteractionPrefix = "complete-interaction";

@@ -16,7 +16,7 @@ namespace Talos.Integration.Command.Services
         CliWrap.Command Command,
         CommandOptions Options,
         CommandSettings Settings,
-        ILogger<CommandBuilder> _logger)
+        ILogger<CommandBuilder> Logger)
     {
         public static CommandBuilder Wrap(string command, CommandSettings settings, ILogger<CommandBuilder> logger)
         {
@@ -93,12 +93,12 @@ namespace Talos.Integration.Command.Services
             var maskedCommand = Options.SensitiveDataToMask.As(q => MaskSensitiveData(Options.Command, q)).Or(Options.Command);
             var maskedArguments = Options.SensitiveDataToMask.As(q => MaskSensitiveData(Command.Arguments, q)).Or(Command.Arguments);
 
-            _logger.LogInformation("Executing command: {Command} {Arguments}",
+            Logger.LogInformation("Executing command: {Command} {Arguments}",
                 maskedCommand, maskedArguments);
             try
             {
                 var result = await InternalExecuteAsync(pipeStdOut, captureStdOut, cancellationToken);
-                _logger.LogInformation("Completed command: {Command} {Arguments} in {Result}",
+                Logger.LogInformation("Completed command: {Command} {Arguments} in {Result}",
                     maskedCommand, maskedArguments, result.Duration);
 
                 return result;
@@ -106,17 +106,17 @@ namespace Talos.Integration.Command.Services
             catch (CommandExecutionException ex)
             {
                 if (ex.Result.WasTimedOut)
-                    _logger.LogWarning("Command {Command} {Arguments} timed out after {Duration}",
+                    Logger.LogWarning("Command {Command} {Arguments} timed out after {Duration}",
                         maskedCommand, maskedArguments, ex.Result.Duration);
                 else if (ex.Result.WasKilled)
-                    _logger.LogWarning("Command {Command} {Arguments} was killed after {Duration}",
+                    Logger.LogWarning("Command {Command} {Arguments} was killed after {Duration}",
                         maskedCommand, maskedArguments, ex.Result.Duration);
                 else
                     if (ex.Result.ExitCode.HasValue)
-                    _logger.LogError(ex, "Command {Command} {Arguments} failed with exit code {ExitCode}.",
+                    Logger.LogError(ex, "Command {Command} {Arguments} failed with exit code {ExitCode}.",
                         maskedCommand, maskedArguments, ex.Result.ExitCode.Value);
                 else
-                    _logger.LogError(ex, "Command {Command} {Arguments} failed with no exit code.",
+                    Logger.LogError(ex, "Command {Command} {Arguments} failed with no exit code.",
                         maskedCommand, maskedArguments);
                 throw;
             }
@@ -145,7 +145,7 @@ namespace Talos.Integration.Command.Services
             {
                 timeoutCts = new CancellationTokenSource(timeout.Value);
                 if (cancellationToken.HasValue)
-                    interruptCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Value.Token, cancellationToken.Value);
+                    interruptCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Value!.Token, cancellationToken.Value);
                 else
                     interruptCts = timeoutCts;
             }
@@ -159,8 +159,8 @@ namespace Talos.Integration.Command.Services
             {
                 stdOutSb = new StringBuilder();
                 if (pipeStdOut != null)
-                    command = Command.WithStandardOutputPipe(PipeTarget.Merge(pipeStdOut, PipeTarget.ToStringBuilder(stdOutSb.Value)));
-                command = Command.WithStandardOutputPipe(PipeTarget.ToStringBuilder(stdOutSb.Value));
+                    command = Command.WithStandardOutputPipe(PipeTarget.Merge(pipeStdOut, PipeTarget.ToStringBuilder(stdOutSb.Value!)));
+                command = Command.WithStandardOutputPipe(PipeTarget.ToStringBuilder(stdOutSb.Value!));
             }
             else if (pipeStdOut != null)
                 command = Command.WithStandardOutputPipe(pipeStdOut);
@@ -171,8 +171,8 @@ namespace Talos.Integration.Command.Services
                 {
                     killCts = new CancellationTokenSource();
                     if (graceTimeout.HasValue)
-                        interruptCts.Value.Token.Register(() => killCts.Value.CancelAfter(graceTimeout.Value));
-                    result = await command.ExecuteAsync(killCts.Value.Token, interruptCts.Value.Token);
+                        interruptCts.Value.Token.Register(() => killCts.Value!.CancelAfter(graceTimeout.Value));
+                    result = await command.ExecuteAsync(killCts.Value!.Token, interruptCts.Value.Token);
                 }
                 else
                     result = await command.ExecuteAsync();

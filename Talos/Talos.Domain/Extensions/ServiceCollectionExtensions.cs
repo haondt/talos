@@ -15,7 +15,6 @@ namespace Talos.Domain.Extensions
         public static IServiceCollection AddTalosServices(this IServiceCollection services, IConfiguration configuration)
         {
             services.Configure<DiscordSettings>(configuration.GetSection(nameof(DiscordSettings)));
-            services.AddHostedService<TalosService>();
 
             services.RegisterInteraction<TalosCommandGroup>();
             services.AddSingleton<IDiscordCommandProcessRegistry, DiscordCommandProcessRegistry>();
