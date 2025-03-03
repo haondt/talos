@@ -176,7 +176,7 @@ namespace Talos.Renovate.Services
                             };
                         }
 
-                        await _notificationService.Notify(target.Value);
+                        await _notificationService.Notify(id, target.Value);
                         await updateDataRepository.SetImageUpdateDataAsync(id, cached.Value!);
                         LogTrace(new ImageUpdateTrace
                         {

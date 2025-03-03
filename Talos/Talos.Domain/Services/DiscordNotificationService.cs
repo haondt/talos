@@ -43,7 +43,7 @@ namespace Talos.Domain.Services
             additionalDescriptionSb.AppendLine("- _defer_ this reminder until the next time the update process runs");
             additionalDescriptionSb.AppendLine("- _ignore_ this reminder and skip the update");
 
-            var embed = PrepareImageUpdateEmbed(update, additionalDescriptionSb.ToString())
+            var embed = PrepareImageUpdateEmbed(id, update, additionalDescriptionSb.ToString())
                 .Build();
 
             var buttonIdPrefix = $"{CompleteInteractionPrefix}-{ImageUpdateInteractionInfix}-";
@@ -89,9 +89,10 @@ namespace Talos.Domain.Services
             return messageId;
         }
 
-        private static EmbedBuilder PrepareImageUpdateEmbed(ImageUpdate update, string? extraDescription = null)
+        private static EmbedBuilder PrepareImageUpdateEmbed(ImageUpdateIdentity id, ImageUpdate update, string? extraDescription = null)
         {
             var descriptionSb = new StringBuilder("**Image update available**\n");
+            descriptionSb.AppendLine($"-# {new Uri(id.GitRemoteUrl).AbsolutePath.Trim('/')} » {id.ServiceKey}");
             descriptionSb.AppendLine($"-# {update.NewImage.ToShortString()} ({update.BumpSize.ToString().ToLower()})\n");
             descriptionSb.AppendLine($"Current Version\n```\n{update.PreviousImage.ToString()}\n```");
             descriptionSb.AppendLine($"New version\n-# _Created {update.NewImageCreatedOn.LocalTime.ToString("g")}_");
@@ -234,9 +235,9 @@ namespace Talos.Domain.Services
             await _redis.KeyDeleteAsync(RedisNamespacer.Discord.Interaction.Component.Message(deserialized.IgnoreButtonId));
         }
 
-        public async Task Notify(ImageUpdate update)
+        public async Task Notify(ImageUpdateIdentity id, ImageUpdate update)
         {
-            var embed = PrepareImageUpdateEmbed(update)
+            var embed = PrepareImageUpdateEmbed(id, update)
                 .Build();
             await (await GetChannelAsync()).SendMessageAsync(embed: embed);
         }

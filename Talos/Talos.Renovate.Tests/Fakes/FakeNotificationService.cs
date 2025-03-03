@@ -15,7 +15,7 @@ namespace Talos.Renovate.Tests.Fakes
             return Task.CompletedTask;
         }
 
-        public Task Notify(ImageUpdate update)
+        public Task Notify(ImageUpdateIdentity id, ImageUpdate update)
         {
             return Task.CompletedTask;
         }

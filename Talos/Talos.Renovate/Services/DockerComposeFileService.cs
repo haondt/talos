@@ -140,13 +140,18 @@ namespace Talos.Renovate.Services
                         continue;
                     }
 
-                    if (service.Value.XTalos == null)
+                    TalosSettings xTalos;
+                    if (service.Value.XTalos != null)
+                        xTalos = service.Value.XTalos;
+                    else if (!string.IsNullOrEmpty(service.Value.XTalosShort))
+                        xTalos = TalosSettings.ParseShortForm(service.Value.XTalosShort);
+                    else
                     {
                         _logger.LogWarning("Skipping image {Image} due to missing talos extension...", id);
                         continue;
                     }
 
-                    if (service.Value.XTalos.Skip)
+                    if (xTalos.Skip)
                     {
                         _logger.LogInformation("Skipping image {Image} due to configured skip...", id);
                         continue;
@@ -154,7 +159,7 @@ namespace Talos.Renovate.Services
 
                     images.Add((
                         new(repository.NormalizedUrl, relativeFilePath, service.Key),
-                        service.Value.XTalos,
+                        xTalos,
                         service.Value.Image));
                 }
             }
