@@ -1,16 +1,16 @@
 # Talos
 
-A Discord bot for managing docker containers on my home server.
+A Discord bot for managing Docker containers on my home server.
 
 ## Deployment
 
-Talos wraps a few command line tools that must be installed on the host system:
+Talos wraps a few command-line tools that must be installed on the host system:
 
 - [`docker`](https://docs.docker.com/reference/cli/docker/)
 - [`skopeo`](https://github.com/containers/skopeo)
 - [`git`](https://git-scm.com/)
 
-The easiest way to run Talos is with the docker image, with has these utilities pre-installed.
+The easiest way to run Talos is with the Docker image, which has these utilities pre-installed.
 Talos also requires a Redis instance for caching, so the recommended way to get up and running is with Docker Compose.
 
 ```yml
@@ -52,7 +52,7 @@ Talos will only work in the provided guild and will default to the provided chan
 {
     "DiscordSettings": {
         "BotToken": "your-bot-token",
-        "GuildId": 1234567890
+        "GuildId": 1234567890,
         "ChannelId": 1234567890
     }
 }
@@ -62,20 +62,19 @@ Talos will only work in the provided guild and will default to the provided chan
     <img src="docs/images/discord.png">
 </div>
 
-
 ### Docker
 
-Talos can connect to docker hosts both locally and remotely to run docker operations.
-For local hosts, simply add an entry in the `DockerSettings` with the docker version.
+Talos can connect to Docker hosts both locally and remotely to run Docker operations.
+For local hosts, simply add an entry in the `DockerSettings` with the Docker version.
 
-The version sets which `compose` command Talos will use, i.e. V1 = `docker-compose`, V2 = `docker compose`.
+The version sets which `compose` command Talos will use, i.e., V1 = `docker-compose`, V2 = `docker compose`.
 
 ```json
 {
     "DockerSettings": {
         "Hosts": {
             "localhost": {
-                "DockerVersion": "V2",
+                "DockerVersion": "V2"
             }
         }
     }
@@ -93,8 +92,7 @@ With this, Talos can execute commands on the host.
 
 #### Remote Hosts
 
-Talos also supports hosts on remote machines over ssh.
-To use this, Talos must have access to an identity file.
+Talos also supports remote hosts over SSH, using an identity file for authentication.
 
 ```json
 {
@@ -114,22 +112,20 @@ To use this, Talos must have access to an identity file.
 ```
 
 > [!IMPORTANT]
-> Talos runs as the `talos` user in it's container, and uses the configured user on remote hosts.
-> This user must exist on the host, and must belong to the docker group in order for Talos to run docker commands.
+> Talos runs as the `talos` user in its container and uses the configured user on remote hosts.
+> This user must exist on the host and must belong to the Docker group for Talos to run Docker commands.
 
 ### Image Updating
 
-Talos can automatically update docker images in an IaC repository, sort of like [Renovate](https://www.mend.io/renovate/).
-To configure it, you must first tell Talos how often to run scans, and what repositories to connect to.
-
-The schedule option defines how often to run.
+Talos can automatically update Docker images in an IaC repository, similar to [Renovate](https://www.mend.io/renovate/).
+To configure it, you must first tell Talos how often to run scans and what repositories to connect to.
 
 ```json
 {
     "ImageUpdateSettings": {
-        "Schedule": { // every hour
+        "Schedule": {
             "Type": "Delay",
-            "DelaySeconds": 3600
+            "DelaySeconds": 3600 // every hour
         }
     }
 }
@@ -155,7 +151,7 @@ Each repository references a host, which provides info on how to connect and aut
                 "Branch": "main",
                 "IncludeGlobs": [ // globs of docker compose files to watch
                     "docker-compose.yml",
-                    "docker-compose.*.yml",
+                    "docker-compose.*.yml"
                 ],
                 "CooldownSeconds": 300
             }
@@ -166,10 +162,10 @@ Each repository references a host, which provides info on how to connect and aut
 
 > [!NOTE]
 > The idea here is that Talos will commit to a repository, then a deployment pipeline takes over to push the update.
-> To avoid creating too many pipelines at once, Talos allows for a per-repository "Cooldown". After making a change to
-> a repository, it will queue future changes until this cooldown passes.
+> To avoid triggering too many pipelines at once, Talos allows a per-repository cooldown period.
+> After making a change, future updates will be queued until this cooldown expires.
 
-Talos will check if images can be updated and commit the change to the repository, with a message detailing the changes.
+Talos checks for image updates and commits the change to the repository with a message detailing the changes.
 
 <div align="center">
     <img src="docs/images/commit.png">
@@ -177,8 +173,7 @@ Talos will check if images can be updated and commit the change to the repositor
 
 #### Registry Throttling
 
-Some container registries have limits on how often you can pull from them. You can feed this info to Talos,
-and it will limit how often it pushes an update that will cause a pull from one of those image registries.
+Some container registries have limits on how often you can pull from them. Talos can enforce these limits to prevent excessive pulls.
 
 ```json
 {
@@ -195,14 +190,14 @@ and it will limit how often it pushes an update that will cause a pull from one 
 
 #### Update Strategy
 
-The update strategy is configured per-container in the docker compose file.
+The update strategy is configured per container in the Docker Compose file.
 
 ```yml
 services:
   helloworld:
     image: hello-world
     x-talos:
-      skip: false # set to true to tell Talos to ignore this container
+      skip: false
       bump: minor
       strategy:
         digest: push
@@ -211,43 +206,41 @@ services:
         major: skip
 ```
 
-Talos looks for the `x-talos` extension for info on how to update the image. If the options have `skip: true`, then Talos will ignore this container.
+Talos looks for the `x-talos` extension for update rules. If `skip: true`, Talos ignores this container.
 
-The `strategy` section describes how to handle updates of varying sizes. The sizes are as follows:
+The `strategy` section defines how to handle updates of different sizes:
 
-- `digest`: when a tag has the name name but the digest has been updated. For named tags (e.g. `latest`), the update is always `digest`.
-- `patch`, `minor`, `major`: the respective component of a tag formatted as a semantic version
+- `digest`: when a tag has the same name but the digest has been updated. For named tags (e.g. `latest`), the update is always `digest`.
+- `patch`, `minor`, `major`: Correspond to semantic versioning updates.
 
-Each update **size** is mapped to a **strategy**. The strategies are as follows:
+Each update **size** is mapped to a **strategy**:
 
-- `push`: Push the change directly to the branch
-- `prompt`: Send a Discord notification asking how to handle the update
-- `notify`: Send a Discord notification saying that there is a new version available
-- `skip`: Ignore the new version entirely
+- `push`: Push the change directly to the branch.
+- `prompt`: Send a Discord notification asking for confirmation.
+- `notify`: Send a Discord notification about the new version.
+- `skip`: Ignore the new version entirely.
 
-Lastly, the `bump` section describes the maximum size to consider for an update. For example, if an image is at `v1.2.3`, and `v1.3.0` is released, Talos will
-only bump the version if the `bump` size is `minor` or `major`. Additionally, Talos will only consider tags with the same number of semantic segments.
+The `bump` setting defines the maximum update size. For example, if an image is at `v1.2.3`, Talos will update to `v1.3.0` only if `bump` is `minor` or higher.
+Additionally, Talos will only consider tags with the same number of semantic segments.
 So `v1.2.3` can be bumped to `v1.3.0`, but not to `v1.3`.
 
 <div align="center">
     <img src="docs/images/prompt.png">
 </div>
 
-**Compact Form**
+#### Compact Form
 
-For convenience, Talos can also respond to a "compact form" extension, `x-tl`.
-This extension takes the form of a single string, `<bump>:<strategies>`. More precisely:
+Talos supports a compact notation using `x-tl` for update strategies.
+This extension accpets a single string in the format `<bump>:<strategies>`, where:
 
-- if the extension is just `x`, then skip
-- otherwise, 1st character is the max bump size (`+`, `^`, `~`, `@` for `major`, `minor`, `patch`, `digest`)
-- if there is no second character use `notify` for all sizes
-- if the second character is not a colon (`:`), then it is the strategy to use for all sizes
-- the strategies are indicated as `*`, `?`, `.`, `!` for `notify`, `prompt`, `skip`, `push`
-- if the second character is a colon, the following characters specify the strategy for the
-  `digest`, `patch`, `minor` and `major` in that order. If there are less than 4 characters given,
-  then we assume `prompt` for the missing ones
+- `x` alone skips updates.
+- The first character defines the bump size (`+`, `^`, `~`, `@` for `major`, `minor`, `patch`, `digest`).
+- If no second character is present, `notify` is used for all updates.
+- If the second character is a strategy, it defines the strategy for all update types.
+- The strategies are represented as `*`, `?`, `.`, `!` for `notify`, `prompt`, `skip`, `push`.
+- If the second character is a colon (`:`), the following characters specify the strategies for `digest`, `patch`, `minor`, and `major` (missing values default to `prompt`).
 
-The previous example could be written in the compact form as such:
+Full example:
 
 ```yml
 services:
@@ -256,25 +249,21 @@ services:
     x-tl: ^:!!?.
 ```
 
-Some more examples:
+Other examples:
 
 ```yml
-x-tl: ~ # bump size patch, all notify
-x-tl: +! # bump size major, all push
-x-tl: ^? # bump size minor, prompt all
-x-tl: ~:!? # bump size patch, digest -> push, patch -> prompt
-x-tl: @:!!!! # bump size digest, digest -> push, everything else is push but will be ignored because the max is digest
-x-tl: +:! # bump size major, digest = push, everything else is the default (notify)
+x-tl: x # skip
+x-tl: ~  # bump up to patch, all notify
+x-tl: +! # bump up to major, all push
+x-tl: ^? # bump up to minor, all prompt
+x-tl: ~:!? # bump up to patch, digest -> push, patch -> prompt
+x-tl: @:!!!! # bump up to digest, all push (although since we have bump:digest everything above digest is ignored)
+x-tl: +:! # bump up to major, digest -> push, others default to notify
 ```
 
-#### Dead Lettering
+### Dead Lettering
 
-Since Talos is pushing updates on a schedule, and may delay pushes in accordance with the various rate-limiting mechanisms, the even that causes a push
-and the push itself are asynchronous. Therefore, when Talos puts an update into the queue, it considers it "pushed". If the push fails, the push goes into
-a dead letter queue. On the next update run Talos will notice the disparity between what it thought it pushed and whats in the repo, and will re-enqueue a new push. You don't have to worry about managing the dead letter queue, but you can examine it to see which pushes failed, why, and if desired you can replay
-them without waiting for the next scheduled update.
-
-Talos will never downgrade an image, even if you are replaying an old dead letter.
+Talos will never downgrade an image, even when replaying an old dead letter.
 
 <div align="center">
     <img src="docs/images/deadletters.png">
@@ -282,10 +271,10 @@ Talos will never downgrade an image, even if you are replaying an old dead lette
 
 ### Webhooks
 
-After pushing an update, Talos can listen for pipeline events, and if a pipeline completes that references one of Talos' commits,
-it will notify the Discord channel.
+After pushing an update, Talos can listen for pipeline events and notify the Discord channel when a pipeline completes.
+It will only consider pipelines that reference one of its commits.
 
-The only configuration needed is the base url Talos should use to generate webhooks.
+The only required configuration is the base URL for webhook generation.
 
 ```json
 {
