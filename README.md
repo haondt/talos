@@ -263,7 +263,14 @@ x-tl: +:! # bump up to major, digest -> push, others default to notify
 
 ### Dead Lettering
 
-Talos will never downgrade an image, even when replaying an old dead letter.
+When Talos determines an image can be updated, it places the update in a queue. A seperate process watches the queue
+and determines what can be pushed based on the throttling and cooldown settings. If a push fails, it is placed in a dead letter queue.
+On the next run, if the main process notices its update was not pushed through, it will requeue it and the second process will retry
+it when possible.
+
+This whole process is automatic, you don't have to manage anything here. It's just useful
+if you want to examine the dead letter queue or replay dead letters ahead of schedule.
+Both queues are idempotent and Talos will never push an image downgrade, even when replaying an old dead letter.
 
 <div align="center">
     <img src="docs/images/deadletters.png">
