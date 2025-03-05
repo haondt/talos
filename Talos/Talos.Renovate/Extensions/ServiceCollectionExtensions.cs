@@ -20,6 +20,7 @@ namespace Talos.Renovate.Extensions
             ImageUpdateSettings.Validate(services.AddOptions<ImageUpdateSettings>()).ValidateOnStart();
             services.Configure<RedisSettings>(configuration.GetSection(nameof(RedisSettings)));
             services.Configure<SkopeoSettings>(configuration.GetSection(nameof(SkopeoSettings)));
+            SkopeoSettings.Validate(services.AddOptions<SkopeoSettings>()).ValidateOnStart();
 
             services.AddSingleton<IRedisProvider>(sp =>
             {

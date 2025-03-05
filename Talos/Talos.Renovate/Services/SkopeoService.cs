@@ -14,9 +14,9 @@ namespace Talos.Renovate.Services
         private readonly ICommandFactory _commandFactory;
         private readonly SkopeoSettings _settings;
         private readonly IDatabase _redis;
-        private readonly TimeSpan _cacheDuration;
         private readonly Dictionary<string, SemaphoreSlim> _semaphores = new();
         private readonly object _semaphoreLock = new();
+        private static readonly Random _random = new();
 
         public SkopeoService(
             IOptions<SkopeoSettings> options,
@@ -26,7 +26,13 @@ namespace Talos.Renovate.Services
             _commandFactory = commandFactory;
             _settings = options.Value;
             _redis = redisProvider.GetDatabase(_settings.RedisDatabase);
-            _cacheDuration = TimeSpan.FromHours(options.Value.CacheDurationHours);
+        }
+
+        private TimeSpan GetCacheDuration()
+        {
+            var variance = (_random.NextDouble() * 2 - 1) * _settings.CacheDurationVarianceHours;
+            var hours = _settings.CacheDurationHours + variance;
+            return TimeSpan.FromHours(hours);
         }
 
         public async Task<List<string>> ListTags(string image, CancellationToken? cancellationToken = null)
@@ -75,7 +81,7 @@ namespace Talos.Renovate.Services
                         .Add($"docker://{image}"))
                     .ExecuteAndCaptureStdoutAsync(cancellationToken);
 
-                await _redis.StringSetAsync(cacheKey, output, _cacheDuration);
+                await _redis.StringSetAsync(cacheKey, output, GetCacheDuration());
                 return output;
             }
             finally
