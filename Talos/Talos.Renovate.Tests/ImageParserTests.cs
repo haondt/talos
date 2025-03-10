@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Options;
 using Talos.Renovate.Models;
 
 namespace Talos.Renovate.Tests
@@ -26,6 +27,7 @@ namespace Talos.Renovate.Tests
                 ("lscr.io/linuxserver/wireguard:1.2", new ParsedImage(Name: "wireguard", Domain: "lscr.io", Namespace: "linuxserver", Untagged: "lscr.io/linuxserver/wireguard", TagAndDigest: new ParsedTagAndDigest(new ParsedTag(Version: new SemanticVersion(Major: 1, Minor: 2))))),
                 ("redis:1", new ParsedImage(Name: "redis", Untagged: "redis", TagAndDigest: new ParsedTagAndDigest(new ParsedTag(Version: new SemanticVersion(Major: 1))))),
                 ("redis", new ParsedImage(Name: "redis", Untagged: "redis")),
+                ("nginx:stable-alpine", new ParsedImage(Name: "nginx", Untagged: "nginx", TagAndDigest: new ParsedTagAndDigest(new ParsedTag(Version: new("stable"), Variant: "alpine")))),
             }.Select(q => new object[] { q.Item1, q.Item2 });
         }
 
@@ -33,7 +35,8 @@ namespace Talos.Renovate.Tests
         [MemberData(nameof(GetTestData))]
         public void WillParseImages(string stringImage, ParsedImage parsedImage)
         {
-            ImageParser.Parse(stringImage, false).Should().BeEquivalentTo(parsedImage);
+            var parser = new ImageParser(Options.Create(new ImageParserSettings()));
+            parser.Parse(stringImage, false).Should().BeEquivalentTo(parsedImage);
         }
 
         [Theory]
@@ -53,7 +56,8 @@ namespace Talos.Renovate.Tests
         [InlineData("my-registry.com/my-image", "my-registry.com/my-image")]
         public void WillInsertDefaultDomain(string inputImage, string outputImage)
         {
-            ImageParser.Parse(inputImage, true).ToString().Should().BeEquivalentTo(outputImage);
+            var parser = new ImageParser(Options.Create(new ImageParserSettings()));
+            parser.Parse(inputImage, true).ToString().Should().BeEquivalentTo(outputImage);
         }
     }
 }

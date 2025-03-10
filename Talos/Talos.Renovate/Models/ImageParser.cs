@@ -1,25 +1,35 @@
 ﻿using Haondt.Core.Extensions;
 using Haondt.Core.Models;
+using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using System.Text;
 using System.Text.RegularExpressions;
+using Talos.Renovate.Abstractions;
 
 namespace Talos.Renovate.Models
 {
-    public static class ImageParser
+    public class ImageParser : IImageParser
     {
-        private const string IMAGE_PATTERN = $@"(?<untagged>(?:(?<domain>[\w.\-_]+\.[\w.\-_]+(?::\d+)?)/)?(?:(?<namespace>(?:[\w.\-_]+)(?:/[\w.\-_]+)*)/)?(?<name>[a-z0-9.\-_]+))(?::(?<taganddigest>{TAG_AND_DIGEST_PATTERN}))?";
-
-        private const string TAG_AND_DIGEST_PATTERN = $@"(?<tag>{TAG_PATTERN})(?:@(?<digest>sha\d+:[a-f0-9]+))?";
-
-        private const string TAG_PATTERN = @"(?<versionprefix>v)?(?:(?:(?<major>\d+)(?:\.(?<minor>\d+)(?:\.(?<patch>\d+))?)?)|(?<release>latest|stable))(?:-(?<variant>\w+))?";
-
         private const string DEFAULT_DOMAIN_NAMESPACE = "library";
         private const string DEFAULT_DOMAIN = "docker.io";
+        private readonly Regex _imageRegex;
+        private readonly Regex _tagAndDigestRegex;
+        private readonly Regex _tagRegex;
 
-        public static Optional<ParsedImage> TryParse(string image, bool insertDefaultDomain = false)
+        public ImageParser(IOptions<ImageParserSettings> options)
         {
-            var match = Regex.Match(image, $"^{IMAGE_PATTERN}$");
+            var settings = options.Value;
+            var tagPattern = $@"(?<versionprefix>v)?(?:(?:(?<major>\d+)(?:\.(?<minor>\d+)(?:\.(?<patch>\d+))?)?)|(?<release>{string.Join('|', options.Value.ValidReleases.Select(Regex.Escape))}))(?:-(?<variant>\w+))?";
+            var tagAndDigestPattern = $@"(?<tag>{tagPattern})(?:@(?<digest>sha\d+:[a-f0-9]+))?";
+            var imagePattern = $@"(?<untagged>(?:(?<domain>[\w.\-_]+\.[\w.\-_]+(?::\d+)?)/)?(?:(?<namespace>(?:[\w.\-_]+)(?:/[\w.\-_]+)*)/)?(?<name>[a-z0-9.\-_]+))(?::(?<taganddigest>{tagAndDigestPattern}))?";
+            _imageRegex = new($"^{imagePattern}$");
+            _tagAndDigestRegex = new($"^{tagAndDigestPattern}$");
+            _tagRegex = new($"^{tagPattern}$");
+        }
+
+        public Optional<ParsedImage> TryParse(string image, bool insertDefaultDomain = false)
+        {
+            var match = _imageRegex.Match(image);
 
             if (!match.Success)
                 return new();
@@ -50,14 +60,14 @@ namespace Talos.Renovate.Models
                 TagAndDigest: tagAndDigest));
         }
 
-        public static Optional<ParsedTagAndDigest> TryParseTagAndDigest(string tagAndDigest)
+        public Optional<ParsedTagAndDigest> TryParseTagAndDigest(string tagAndDigest)
         {
-            var match = Regex.Match(tagAndDigest, $"^{TAG_AND_DIGEST_PATTERN}$");
+            var match = _tagAndDigestRegex.Match(tagAndDigest);
             if (!match.Success)
                 return new();
             return TryParseTagAndDigest(match);
         }
-        private static Optional<ParsedTagAndDigest> TryParseTagAndDigest(Match match)
+        private Optional<ParsedTagAndDigest> TryParseTagAndDigest(Match match)
         {
             var digest = TryExtractNonEmptyGroup(match, "digest");
             var tag = TryParseTag(match);
@@ -67,15 +77,15 @@ namespace Talos.Renovate.Models
             return new(new(tag.Value, digest));
         }
 
-        public static Optional<ParsedTag> TryParseTag(string tag)
+        public Optional<ParsedTag> TryParseTag(string tag)
         {
-            var match = Regex.Match(tag, $"^{TAG_PATTERN}$");
+            var match = _tagRegex.Match(tag);
             if (!match.Success)
                 return new();
             return TryParseTag(match);
         }
 
-        public static Optional<ParsedTag> TryParseTag(Match match)
+        public Optional<ParsedTag> TryParseTag(Match match)
         {
             Union<SemanticVersion, string> version;
             var majorString = TryExtractNonEmptyGroup(match, "major");
@@ -103,7 +113,7 @@ namespace Talos.Renovate.Models
 
 
 
-        public static ParsedImage Parse(string image, bool insertDefaultDomain = false)
+        public ParsedImage Parse(string image, bool insertDefaultDomain = false)
         {
             var parsed = TryParse(image, insertDefaultDomain);
             if (parsed.HasValue)

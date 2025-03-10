@@ -39,6 +39,9 @@ namespace Talos.Renovate.Extensions
             services.AddHostedService<PushQueueListener>();
             services.AddHostedService<ImageUpdateBackgroundService>();
 
+            services.AddSingleton<IImageParser, ImageParser>();
+            services.Configure<ImageParserSettings>(configuration.GetSection(nameof(ImageParserSettings)));
+
 
             return services;
         }

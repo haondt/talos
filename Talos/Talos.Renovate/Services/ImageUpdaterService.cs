@@ -24,7 +24,8 @@ namespace Talos.Renovate.Services
         IDockerComposeFileService _dockerComposeFileService,
         IGitService _git,
         IPushQueueMutator _pushQueue,
-        IImageUpdateDataRepository updateDataRepository) : IImageUpdaterService
+        IImageUpdateDataRepository updateDataRepository,
+        IImageParser _imageParser) : IImageUpdaterService
     {
         private int _isRunning = 0;
 

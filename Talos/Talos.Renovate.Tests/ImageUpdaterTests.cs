@@ -38,7 +38,8 @@ namespace Talos.Renovate.Tests
                 mockDockerComposeFileService.Object,
                 mockGitService.Object,
                 mockQueueMutator.Object,
-                mockUpdateDataStorage.Object
+                mockUpdateDataStorage.Object,
+                new ImageParser(Options.Create(new ImageParserSettings()))
                 );
         }
 
@@ -96,7 +97,7 @@ namespace Talos.Renovate.Tests
                     ("v2", "sha256:00c"),
                     ("latest-alpine", "sha256:00d"),
                     ("stable-alpine", "sha256:00e"),
-                    ("debian-alpine", "sha256:00f"),
+                    ("mainline-alpine", "sha256:00f"),
                     ("v2.3.4-alpine", "sha256:010"),
                     ("v2.3.3-alpine", "sha256:011"),
                     ("v2.3.5-alpine", "sha256:012"),
