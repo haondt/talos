@@ -1,5 +1,6 @@
 ﻿using Haondt.Core.Extensions;
 using Haondt.Core.Models;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using System.Text;
@@ -15,8 +16,9 @@ namespace Talos.Renovate.Models
         private readonly Regex _imageRegex;
         private readonly Regex _tagAndDigestRegex;
         private readonly Regex _tagRegex;
+        private readonly ILogger<ImageParser> _logger;
 
-        public ImageParser(IOptions<ImageParserSettings> options)
+        public ImageParser(IOptions<ImageParserSettings> options, ILogger<ImageParser> logger)
         {
             var settings = options.Value;
             var tagPattern = $@"(?<versionprefix>v)?(?:(?:(?<major>\d+)(?:\.(?<minor>\d+)(?:\.(?<patch>\d+))?)?)|(?<release>{string.Join('|', options.Value.ValidReleases.Select(Regex.Escape))}))(?:-(?<variant>\w+))?";
@@ -25,6 +27,7 @@ namespace Talos.Renovate.Models
             _imageRegex = new($"^{imagePattern}$");
             _tagAndDigestRegex = new($"^{tagAndDigestPattern}$");
             _tagRegex = new($"^{tagPattern}$");
+            _logger = logger;
         }
 
         public Optional<ParsedImage> TryParse(string image, bool insertDefaultDomain = false)
@@ -91,11 +94,19 @@ namespace Talos.Renovate.Models
             var majorString = TryExtractNonEmptyGroup(match, "major");
             if (majorString.HasValue)
             {
-                version = new(new SemanticVersion(
-                    VersionPrefix: TryExtractNonEmptyGroup(match, "versionprefix"),
-                    Major: int.Parse(majorString.Value),
-                    Minor: TryExtractNonEmptyGroup(match, "minor").As(int.Parse),
-                    Patch: TryExtractNonEmptyGroup(match, "patch").As(int.Parse)));
+                try
+                {
+                    version = new(new SemanticVersion(
+                        VersionPrefix: TryExtractNonEmptyGroup(match, "versionprefix"),
+                        Major: int.Parse(majorString.Value),
+                        Minor: TryExtractNonEmptyGroup(match, "minor").As(int.Parse),
+                        Patch: TryExtractNonEmptyGroup(match, "patch").As(int.Parse)));
+                }
+                catch (Exception e)
+                {
+                    _logger.LogError(e, "Ran into exception while parsing image tag match {match}", match.Value);
+                    return new();
+                }
             }
             else if (TryExtractNonEmptyGroup(match, "release").TryGetValue(out var release))
             {
