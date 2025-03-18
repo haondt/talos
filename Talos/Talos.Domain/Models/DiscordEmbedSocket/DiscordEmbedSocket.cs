@@ -18,7 +18,6 @@ namespace Talos.Domain.Models.DiscordEmbedSocket
 
     public class DiscordEmbedSocket : IAsyncDisposable
     {
-
         private readonly IDiscordEmbedSocketConnector _connector;
         private readonly DiscordEmbedSocketOptions _options;
         private bool _isDisposed = false;
@@ -26,7 +25,8 @@ namespace Talos.Domain.Models.DiscordEmbedSocket
 
         public DiscordEmbedState State { get; internal init; }
 
-        private DiscordEmbedSocket(IDiscordEmbedSocketConnector connector, DiscordEmbedSocketOptions options)
+        private DiscordEmbedSocket(IDiscordEmbedSocketConnector connector,
+            DiscordEmbedSocketOptions options)
         {
             _connector = connector;
             _options = options;

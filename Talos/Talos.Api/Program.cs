@@ -39,6 +39,7 @@ builder.Services.AddTalosDiscordServices(builder.Configuration)
     .AddTalosServices(builder.Configuration)
     .AddTalosApiServices(builder.Configuration)
     .AddSerilog();
+
 builder.Logging.ClearProviders()
     .AddSerilog();
 

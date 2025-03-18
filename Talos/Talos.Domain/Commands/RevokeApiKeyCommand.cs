@@ -1,6 +1,5 @@
 ﻿using Discord;
 using Discord.Interactions;
-using Talos.Domain.Models.DiscordEmbedSocket;
 using Talos.Domain.Services;
 
 namespace Talos.Domain.Commands
@@ -13,31 +12,26 @@ namespace Talos.Domain.Commands
             [Summary("name", "Name of the webhook")]
             string name)
         {
-            await using var socket = await DiscordEmbedSocket.OpenSocketAsync(this, o =>
-            {
-                o.Color = Color.Green;
-            });
+            await BaseCommand(nameof(RevokeWebhookCommand),
+                (_, o) =>
+                {
+                    o.Color = Color.Green;
+                },
+                socket => socket
+                    .StageUpdate(b => b
+                    .AddDescriptionPart("**Revoke webhook**")
+                    .AddDescriptionPart($"-# {name}")),
+                async (_, socket) =>
+                {
+                    if (string.IsNullOrWhiteSpace(name))
+                        throw new ArgumentException("Name is required");
+                    name = name.ToLower().Trim();
 
-            socket.StageUpdate(b => b
-                .AddDescriptionPart("**Revoke webhook**")
-                .AddDescriptionPart($"-# {name}"));
+                    await webhookService.RevokeApiToken(name);
 
-            try
-            {
-                if (string.IsNullOrWhiteSpace(name))
-                    throw new ArgumentException("Name is required");
-                name = name.ToLower().Trim();
-
-                await webhookService.RevokeApiToken(name);
-
-                await socket.UpdateAsync(b => b
-                    .AddDescriptionPart("Api key removed"));
-            }
-            catch (Exception ex)
-            {
-                await RenderErrorAsync(socket, ex);
-                throw;
-            }
+                    await socket.UpdateAsync(b => b
+                        .AddDescriptionPart("Api key removed"));
+                });
         }
     }
 

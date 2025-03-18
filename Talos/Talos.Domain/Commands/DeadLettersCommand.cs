@@ -1,6 +1,5 @@
 ﻿using Discord;
 using Discord.Interactions;
-using Talos.Domain.Models.DiscordEmbedSocket;
 
 namespace Talos.Domain.Commands
 {
@@ -9,25 +8,16 @@ namespace Talos.Domain.Commands
         [SlashCommand("deadletters", "Get the size of the deadletter queue for update pushes")]
         public async Task DeadLettersCommand()
         {
-            await using var socket = await DiscordEmbedSocket.OpenSocketAsync(this, o =>
-            {
-                o.Color = Color.Purple;
-            });
-
-            socket.StageUpdate(b => b
-                .AddDescriptionPart("**Deadletters**"));
-
-            try
-            {
-                var count = await pushQueueMutator.GetDeadLetterQueueSizeAsync();
-                await socket.UpdateAsync(b => b
-                    .AddDescriptionPart($"There are {count} pushes in the deadletter queue"));
-            }
-            catch (Exception ex)
-            {
-                await RenderErrorAsync(socket, ex);
-                throw;
-            }
+            await BaseCommand(nameof(DeadLettersCommand),
+                (_, o) => o.Color = Color.Purple,
+                socket => socket.StageUpdate(b => b
+                    .AddDescriptionPart("**Deadletters**")),
+                async (_, socket) =>
+                {
+                    var count = await pushQueueMutator.GetDeadLetterQueueSizeAsync();
+                    await socket.UpdateAsync(b => b
+                        .AddDescriptionPart($"There are {count} pushes in the deadletter queue"));
+                });
         }
     }
 }

@@ -3,6 +3,7 @@ using Discord.Interactions;
 using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Talos.Core.Abstractions;
 using Talos.Discord.Abstractions;
 using Talos.Discord.Extensions;
 using Talos.Discord.Models;
@@ -17,8 +18,10 @@ namespace Talos.Discord.Services
         private readonly DiscordSocketClient _client;
         private readonly IServiceProvider _serviceProvider;
         private readonly IEnumerable<IRegisteredInteractionModule> _registrations;
+        private readonly ITracer<InteractionServiceHandler> _tracer;
 
         public InteractionServiceHandler(
+            ITracer<InteractionServiceHandler> tracer,
             IOptions<DiscordSettings> discordOptions,
             InteractionService interactionService,
             DiscordSocketClient client,
@@ -32,6 +35,7 @@ namespace Talos.Discord.Services
             _client = client;
             _serviceProvider = serviceProvider;
             _registrations = registrations;
+            _tracer = tracer;
 
             _client.InteractionCreated += HandleInteractionAsync;
 
@@ -48,8 +52,19 @@ namespace Talos.Discord.Services
 
         private async Task HandleInteractionAsync(SocketInteraction interaction)
         {
-            var context = new SocketInteractionContext(_client, interaction);
-            await _interactionService.ExecuteCommandAsync(context, _serviceProvider);
+            using var span = _tracer.StartSpan(nameof(HandleInteractionAsync), SpanKind.Server);
+            using (_logger.BeginScope(new Dictionary<string, object> { { "TraceId", span.TraceId } }))
+                try
+                {
+                    var context = new SocketInteractionContext(_client, interaction);
+                    await _interactionService.ExecuteCommandAsync(context, _serviceProvider);
+                    span.SetStatusSuccess();
+                }
+                catch (Exception ex)
+                {
+                    span.SetStatusFailure(ex.GetType().ToString());
+                    throw;
+                }
         }
 
         public Task LogAsync(LogMessage logMessage)

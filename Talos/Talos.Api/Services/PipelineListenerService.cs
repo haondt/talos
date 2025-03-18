@@ -1,6 +1,7 @@
 ﻿
 using Haondt.Core.Models;
 using Talos.Api.Models;
+using Talos.Core.Abstractions;
 using Talos.Core.Extensions;
 using Talos.Renovate.Abstractions;
 using Talos.Renovate.Models;
@@ -8,6 +9,7 @@ using Talos.Renovate.Models;
 namespace Talos.Api.Services
 {
     public class PipelineListenerService(
+        ITracer<PipelineListenerService> tracer,
         INotificationService notificationService,
         IImageUpdaterService imageUpdaterService,
         ILogger<PipelineListenerService> logger) : BackgroundService
@@ -38,6 +40,10 @@ namespace Talos.Api.Services
 
         private async Task HandleGitLabPipelineEvent(GitLabPipelineEventDto pipelineEvent)
         {
+            using var span = tracer.StartSpan(nameof(ExecuteAsync), SpanKind.Consumer);
+            using var _ = logger.BeginScope(new Dictionary<string, object> { { "TraceId", span.TraceId } });
+            span.SetStatusSuccess();
+
             // discard child pipelines
             if (pipelineEvent.IsChildPipeline)
                 return;
@@ -79,6 +85,7 @@ namespace Talos.Api.Services
             {
                 logger.LogError(ex, "Notification service failed to accept pipeline completion event for gitlab pipeline {Pipeline} {Url}",
                     pipelineEvent.ObjectAttributes.Id, pipelineEvent.ObjectAttributes.Url);
+                span.SetStatusFailure(ex.GetType().ToString());
             }
 
 

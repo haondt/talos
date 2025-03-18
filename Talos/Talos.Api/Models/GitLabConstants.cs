@@ -7,6 +7,6 @@
         public const string PIPELINE_STATUS_SUCCESS = "success";
         public const string PIPELINE_KIND = "pipeline";
         public const string GITLAB_EVENT_PIPELINE = "Pipeline Hook";
-        public const string GITLAB_EVENT_HEADER = "X-Gitlab-Event";
+        public const string GITLAB_EVENT_HEADER = "X-GitLab-Event";
     }
 }

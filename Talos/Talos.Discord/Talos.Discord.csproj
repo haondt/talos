@@ -15,4 +15,8 @@
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="9.0.2" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Talos.Core\Talos.Core.csproj" />
+  </ItemGroup>
+
 </Project>
