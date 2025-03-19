@@ -113,30 +113,32 @@ namespace Talos.Renovate.Services
                 if (pushes.Count == 0)
                     return;
 
-                span = new(tracer.StartSpan(nameof(ProcessPushesAsync)));
-                using var _ = _logger.BeginScope(new Dictionary<string, object> { { "TraceId", span.Value!.TraceId } });
 
                 var pushesByDomain = pushes.GroupBy(p => p.Update.NewImage.Domain.Or(""))
                     .ToDictionary(g => g.Key, g => g.ToList());
                 var allowedPushesByDomain = new List<ScheduledPush>();
                 var now = AbsoluteDateTime.Now;
 
-                foreach (var (domain, domainPushes) in pushesByDomain)
-                {
-                    if (string.IsNullOrEmpty(domain) || !settings.Value.Domains.TryGetValue(domain, out var throttlingConfiguration))
-                        allowedPushesByDomain.AddRange(domainPushes);
-                    else
+                using (tracer.StartSpan(nameof(GetPendingPushesAsync), traceLevel: TraceLevel.Verbose))
+                    foreach (var (domain, domainPushes) in pushesByDomain)
                     {
-                        var windowStart = now with { UnixTimeSeconds = now.UnixTimeSeconds - (int)throttlingConfiguration.Per };
-                        var pushesInTheLast = await _queueDb.SortedSetLengthAsync(RedisNamespacer.Pushes.Timestamps.Domain(domain), windowStart.UnixTimeSeconds, AbsoluteDateTime.MaxValue.UnixTimeSeconds);
-                        var available = throttlingConfiguration.Limit - (int)pushesInTheLast;
-                        if (available > 0)
-                            allowedPushesByDomain.AddRange(domainPushes.Take(available));
+                        if (string.IsNullOrEmpty(domain) || !settings.Value.Domains.TryGetValue(domain, out var throttlingConfiguration))
+                            allowedPushesByDomain.AddRange(domainPushes);
+                        else
+                        {
+                            var windowStart = now with { UnixTimeSeconds = now.UnixTimeSeconds - (int)throttlingConfiguration.Per };
+                            var pushesInTheLast = await _queueDb.SortedSetLengthAsync(RedisNamespacer.Pushes.Timestamps.Domain(domain), windowStart.UnixTimeSeconds, AbsoluteDateTime.MaxValue.UnixTimeSeconds);
+                            var available = throttlingConfiguration.Limit - (int)pushesInTheLast;
+                            if (available > 0)
+                                allowedPushesByDomain.AddRange(domainPushes.Take(available));
+                        }
                     }
-                }
 
                 if (allowedPushesByDomain.Count == 0)
                     return;
+
+                span = new(tracer.StartSpan(nameof(ProcessPushesAsync)));
+                using var _ = _logger.BeginScope(new Dictionary<string, object> { { "TraceId", span.Value!.TraceId } });
 
                 var pushesByRemote = allowedPushesByDomain
                     .GroupBy(p => p.Target.GitRemoteUrl)
