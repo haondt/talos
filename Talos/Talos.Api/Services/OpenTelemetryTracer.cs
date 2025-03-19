@@ -15,7 +15,7 @@ namespace Talos.Api.Services
         private Tracer _tracer = provider.GetTracer(
             typeof(TClass).Assembly.GetName().Name ?? "Default");
 
-        public ISpan StartSpan(string name, SpanKind kind = SpanKind.Unknown)
+        public ISpan StartSpan(string name, SpanKind kind = SpanKind.Unknown, TraceLevel traceLevel = TraceLevel.Info)
         {
             var otelKind = kind switch
             {
@@ -25,10 +25,11 @@ namespace Talos.Api.Services
 
             };
             var span = _tracer.StartActiveSpan($"{_spanPrefix}{name}", otelKind);
+            span.SetAttribute("Level", traceLevel.ToString());
 
             return new OpenTelemetrySpan(span);
         }
-        public ISpan StartRootSpan(string name, SpanKind kind = SpanKind.Unknown)
+        public ISpan StartRootSpan(string name, SpanKind kind = SpanKind.Unknown, TraceLevel traceLevel = TraceLevel.Info)
         {
             var otelKind = kind switch
             {
@@ -38,6 +39,7 @@ namespace Talos.Api.Services
 
             };
             var span = _tracer.StartRootSpan($"{_spanPrefix}{name}", otelKind);
+            span.SetAttribute("Level", traceLevel.ToString());
 
             return new OpenTelemetrySpan(span);
         }

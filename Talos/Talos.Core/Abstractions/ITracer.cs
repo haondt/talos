@@ -1,4 +1,5 @@
 ﻿using Haondt.Core.Models;
+using System.Diagnostics;
 
 namespace Talos.Core.Abstractions
 {
@@ -7,11 +8,10 @@ namespace Talos.Core.Abstractions
         Optional<string> CurrentTraceId { get; }
         Optional<string> CurrentSpanId { get; }
 
-        public ISpan StartSpan(string name, SpanKind kind = SpanKind.Unknown);
-        public ISpan StartRootSpan(string name, SpanKind kind = SpanKind.Unknown);
+        public ISpan StartSpan(string name, SpanKind kind = SpanKind.Unknown, TraceLevel traceLevel = TraceLevel.Info);
+        public ISpan StartRootSpan(string name, SpanKind kind = SpanKind.Unknown, TraceLevel traceLevel = TraceLevel.Info);
     }
 
-    public interface ITracer<TClass> : ITracer
-    {
-    }
+    public interface ITracer<TClass> : ITracer { }
 }
+

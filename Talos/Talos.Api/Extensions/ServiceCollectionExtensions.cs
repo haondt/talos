@@ -21,14 +21,10 @@ namespace Talos.Api.Extensions
                 services.AddOpenTelemetry()
                     .WithTracing(builder =>
                     {
-                        builder.AddSource(
-                            "Talos.Api",
-                            "Talos.Renovate",
-                            "Talos.Discord",
-                            "Talos.Domain",
-                            "Talos.Core",
-                            "Talos.Docker",
-                            "Talos.Integration");
+                        builder.AddSource(tracingSettings.IncludeTraceLibraries
+                            .Where(kvp => kvp.Value)
+                            .Select(kvp => kvp.Key)
+                            .ToArray());
                         builder.SetResourceBuilder(ResourceBuilder.CreateDefault()
                             .AddService("Talos"));
                         builder.AddOtlpExporter(o =>

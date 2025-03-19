@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using StackExchange.Redis;
+using System.Diagnostics;
 using Talos.Core.Abstractions;
 using Talos.Core.Extensions;
 using Talos.Core.Models;
@@ -14,6 +15,7 @@ using Talos.Renovate.Models;
 namespace Talos.Renovate.Services
 {
     public class PushQueueListener(IRedisProvider redisProvider,
+        ITracer<IBatch> batchTracer,
         ITracer<PushQueueListener> tracer,
         IOptions<UpdateThrottlingSettings> settings,
         ILogger<PushQueueMutator> _logger,
@@ -41,7 +43,7 @@ namespace Talos.Renovate.Services
 
         private async Task<List<ScheduledPush>> GetPendingPushesAsync()
         {
-            using var _ = tracer.StartSpan(nameof(GetPendingPushesAsync));
+            using var _ = tracer.StartSpan(nameof(GetPendingPushesAsync), traceLevel: TraceLevel.Verbose);
             var keys = await _queueDb.SetMembersAsync(RedisNamespacer.Pushes.Queue);
             var pushes = new List<ScheduledPush>();
             foreach (var key in keys)
@@ -57,7 +59,7 @@ namespace Talos.Renovate.Services
         {
             foreach (var chunk in pushes.Chunk(REDIS_MAX_CHUNK_SIZE))
             {
-                var batch = _queueDb.CreateBatch().WithMethodTracing(tracer);
+                var batch = _queueDb.CreateBatch().WithMethodTracing(batchTracer);
                 var tasks = new List<Task>();
                 foreach (var push in chunk)
                 {
@@ -74,7 +76,7 @@ namespace Talos.Renovate.Services
 
             foreach (var chunk in pushKeys.Chunk(REDIS_MAX_CHUNK_SIZE))
             {
-                var batch = _queueDb.CreateBatch().WithMethodTracing(tracer);
+                var batch = _queueDb.CreateBatch().WithMethodTracing(batchTracer);
                 var deleteTasks = chunk.Select(k => batch.KeyDeleteAsync(k.ToString())).ToList();
                 batch.Execute();
                 await Task.WhenAll(deleteTasks);
@@ -85,7 +87,7 @@ namespace Talos.Renovate.Services
 
             foreach (var chunk in deadletters.Chunk(REDIS_MAX_CHUNK_SIZE))
             {
-                var batch = _queueDb.CreateBatch().WithMethodTracing(tracer);
+                var batch = _queueDb.CreateBatch().WithMethodTracing(batchTracer);
                 var tasks = new List<Task>();
                 foreach (var deadletter in chunk)
                 {
@@ -112,6 +114,7 @@ namespace Talos.Renovate.Services
                     return;
 
                 span = new(tracer.StartSpan(nameof(ProcessPushesAsync)));
+                using var _ = _logger.BeginScope(new Dictionary<string, object> { { "TraceId", span.Value!.TraceId } });
 
                 var pushesByDomain = pushes.GroupBy(p => p.Update.NewImage.Domain.Or(""))
                     .ToDictionary(g => g.Key, g => g.ToList());

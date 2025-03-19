@@ -29,6 +29,9 @@ namespace Talos.Renovate.Services
         }
         private async Task<Optional<ScheduledPush>> ProcessService(ImageUpdateIdentity id, TalosSettings configuration, string image)
         {
+            using var span = tracer.StartSpan($"{nameof(ProcessService)}");
+            span.SetAttribute(nameof(ImageUpdateIdentity), id.ToString());
+            span.SetAttribute("Image", image);
             var cached = await updateDataRepository.TryGetImageUpdateDataAsync(id);
             if (cached.HasValue && cached.Value.Image != image)
             {
@@ -343,6 +346,8 @@ namespace Talos.Renovate.Services
 
         private async Task CompletePushAsync(ScheduledPush push)
         {
+            using var span = tracer.StartSpan(nameof(CompletePushAsync));
+            span.SetAttribute(nameof(ImageUpdateIdentity), push.Target.ToString());
             var cached = (await updateDataRepository.TryGetImageUpdateDataAsync(push.Target))
                 .As(c =>
                 {

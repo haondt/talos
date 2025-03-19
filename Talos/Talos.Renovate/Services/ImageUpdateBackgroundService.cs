@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Talos.Core.Abstractions;
 using Talos.Renovate.Abstractions;
 using Talos.Renovate.Models;
 
@@ -8,6 +9,7 @@ namespace Talos.Renovate.Services
 {
     public class ImageUpdateBackgroundService(
         IOptions<ImageUpdateSettings> updateOptions,
+        ITracer<ImageUpdateBackgroundService> tracer,
         ILogger<ImageUpdateBackgroundService> logger,
         IImageUpdaterService imageUpdaterService) : BackgroundService
     {
@@ -20,14 +22,18 @@ namespace Talos.Renovate.Services
                 case ScheduleType.Delay:
                     while (!cancellationToken.IsCancellationRequested)
                     {
-                        try
-                        {
-                            await imageUpdaterService.RunUpdateAsync(cancellationToken);
-                        }
-                        catch (Exception ex)
-                        {
-                            logger.LogError(ex, "Error during image update. Retrying after delay.");
-                        }
+                        using (var span = tracer.StartSpan(nameof(ExecuteAsync), SpanKind.Producer))
+                            try
+                            {
+                                using var _ = logger.BeginScope(new Dictionary<string, object> { { "TraceId", span.TraceId } });
+                                await imageUpdaterService.RunUpdateAsync(cancellationToken);
+                                span.SetStatusSuccess();
+                            }
+                            catch (Exception ex)
+                            {
+                                span.SetStatusFailure(ex.Message);
+                                logger.LogError(ex, "Error during image update. Retrying after delay.");
+                            }
                         try
                         {
                             await Task.Delay(TimeSpan.FromSeconds(_updateSettings.Schedule.DelaySeconds), cancellationToken);

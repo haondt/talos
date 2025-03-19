@@ -8,8 +8,8 @@ namespace Talos.Domain.Autocompletion
 {
     public class HostAutocompleteHandler(
         IDockerClientFactory dockerClientFactory,
-        ITracer<ApiIntegrationAutocompleteProvider> tracer,
-        ILogger<ApiIntegrationAutocompleteProvider> logger
+        ITracer<HostAutocompleteHandler> tracer,
+        ILogger<HostAutocompleteHandler> logger
         ) : AutocompleteHandler
     {
         public override Task<AutocompletionResult> GenerateSuggestionsAsync(IInteractionContext context, IAutocompleteInteraction autocompleteInteraction, IParameterInfo parameter, IServiceProvider services)

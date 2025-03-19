@@ -53,7 +53,7 @@ namespace Talos.Renovate.Services
                     {
                         using (_logger.BeginScope(new Dictionary<string, object>
                         {
-                            ["Host"] = r.Host
+                            ["Host"] = r.Host,
                         }))
                         {
                             var host = _updateSettings.Hosts[r.Host];
@@ -77,13 +77,14 @@ namespace Talos.Renovate.Services
 
         public async Task<bool> CheckIfCommitBelongsToUs(string commit)
         {
-            using var _ = tracer.StartSpan(nameof(CheckIfCommitBelongsToUs));
             return await _redis.SetContainsAsync(RedisNamespacer.Git.Commits, commit);
         }
 
 
         private async Task RunAsync(HostConfiguration host, RepositoryConfiguration repositoryConfiguration, CancellationToken? cancellationToken = null)
         {
+            using var span = tracer.StartSpan($"{nameof(RunAsync)}");
+            span.SetAttribute("Host", repositoryConfiguration.Host);
             using var repoDir = await _git.CloneAsync(host, repositoryConfiguration);
             var processingTasks = _dockerComposeFileService.ExtractUpdateTargets(repositoryConfiguration, repoDir.Path)
                 .Select(q =>
@@ -135,6 +136,7 @@ namespace Talos.Renovate.Services
 
         public async Task<(List<ScheduledPush> SuccessfulPushes, List<ScheduledPushDeadLetter> FailedPushes)> PushUpdates(HostConfiguration host, RepositoryConfiguration repositoryConfiguration, List<ScheduledPush> scheduledPushes, CancellationToken? cancellationToken = null)
         {
+            using var _ = tracer.StartSpan(nameof(PushUpdates));
             using var repoDir = await _git.CloneAsync(host, repositoryConfiguration);
 
             // this will clone and checkout the target branch if its set, otherwise it will take the default branch

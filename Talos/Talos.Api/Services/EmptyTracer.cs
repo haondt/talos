@@ -1,4 +1,5 @@
 ﻿using Haondt.Core.Models;
+using System.Diagnostics;
 using Talos.Core.Abstractions;
 
 namespace Talos.Api.Services
@@ -9,12 +10,12 @@ namespace Talos.Api.Services
 
         public Optional<string> CurrentSpanId => default;
 
-        public ISpan StartRootSpan(string name, SpanKind kind = SpanKind.Unknown)
+        public ISpan StartRootSpan(string name, SpanKind kind = SpanKind.Unknown, TraceLevel traceLevel = TraceLevel.Info)
         {
             return new EmptySpan();
         }
 
-        public ISpan StartSpan(string name, SpanKind kind = SpanKind.Unknown)
+        public ISpan StartSpan(string name, SpanKind kind = SpanKind.Unknown, TraceLevel traceLevel = TraceLevel.Info)
         {
             return new EmptySpan();
         }

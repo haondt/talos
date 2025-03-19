@@ -2,12 +2,15 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System.Text;
 using System.Web;
+using Talos.Core.Abstractions;
 using Talos.Renovate.Abstractions;
 using Talos.Renovate.Models;
 
 namespace Talos.Renovate.Services
 {
-    public class GitLabService(HttpClient _httpClient, ILogger<GitLabService> _logger) : IGitHostService
+    public class GitLabService(HttpClient _httpClient,
+        ITracer<GitLabService> tracer,
+        ILogger<GitLabService> _logger) : IGitHostService
     {
         private const string API_BASE_PATH = "api/v4";
         private const string DEFAULT_BRANCH = "main";
@@ -38,10 +41,14 @@ namespace Talos.Renovate.Services
             };
 
             HttpResponseMessage result;
-            if (cancellationToken.HasValue)
-                result = await _httpClient.GetAsync(uri.Uri, cancellationToken.Value);
-            else
-                result = await _httpClient.GetAsync(uri.Uri);
+            using (var span = tracer.StartSpan(nameof(HasOpenMergeRequestsForBranch)))
+            {
+                span.SetAttribute("Host", uri.Uri.Host);
+                if (cancellationToken.HasValue)
+                    result = await _httpClient.GetAsync(uri.Uri, cancellationToken.Value);
+                else
+                    result = await _httpClient.GetAsync(uri.Uri);
+            }
             result.EnsureSuccessStatusCode();
 
             var mrs = JsonConvert.DeserializeObject<List<GitLabMergeRequestDto>>(await result.Content.ReadAsStringAsync(), SerializationConstants.SerializerSettings)
@@ -69,10 +76,14 @@ namespace Talos.Renovate.Services
                 _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", host.Token);
 
             HttpResponseMessage result;
-            if (cancellationToken.HasValue)
-                result = await _httpClient.PostAsync($"{projectUrl}/merge_requests", content, cancellationToken.Value);
-            else
-                result = await _httpClient.PostAsync($"{projectUrl}/merge_requests", content);
+            using (var span = tracer.StartSpan(nameof(CreateMergeRequestForBranch)))
+            {
+                span.SetAttribute("Host", new Uri(repository.Url).Host);
+                if (cancellationToken.HasValue)
+                    result = await _httpClient.PostAsync($"{projectUrl}/merge_requests", content, cancellationToken.Value);
+                else
+                    result = await _httpClient.PostAsync($"{projectUrl}/merge_requests", content);
+            }
 
             result.EnsureSuccessStatusCode();
 

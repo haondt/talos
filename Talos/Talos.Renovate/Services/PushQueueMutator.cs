@@ -2,13 +2,17 @@
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using StackExchange.Redis;
+using Talos.Core.Abstractions;
 using Talos.Core.Models;
 using Talos.Renovate.Abstractions;
 using Talos.Renovate.Models;
 
 namespace Talos.Renovate.Services
 {
-    public class PushQueueMutator(IRedisProvider redisProvider, IOptions<UpdateThrottlingSettings> settings, ILogger<PushQueueMutator> _logger) : IPushQueueMutator
+    public class PushQueueMutator(
+        IRedisProvider redisProvider, IOptions<UpdateThrottlingSettings> settings,
+        ITracer<PushQueueMutator> tracer,
+        ILogger<PushQueueMutator> _logger) : IPushQueueMutator
     {
 
         private readonly SemaphoreSlim _queueLock = new(1, 1);
@@ -29,6 +33,7 @@ namespace Talos.Renovate.Services
 
         public async Task UnsafeUpsertAndEnqueuePushAsync(ScheduledPush push)
         {
+            using var span = tracer.StartSpan(nameof(UnsafeUpsertAndEnqueuePushAsync));
             var key = RedisNamespacer.Pushes.Push(push.Target.ToString());
             var value = JsonConvert.SerializeObject(push, SerializationConstants.SerializerSettings)
                 ?? throw new JsonSerializationException($"Failed to serialize scheduled push for target {key}");
@@ -59,6 +64,7 @@ namespace Talos.Renovate.Services
 
         public async Task<long> ReplayDeadLettersAsync()
         {
+            using var span = tracer.StartSpan(nameof(ReplayDeadLettersAsync));
             long total = 0;
             await _queueLock.WaitAsync();
             try
@@ -90,6 +96,7 @@ namespace Talos.Renovate.Services
 
         public async Task<long> ClearDeadLettersAsync()
         {
+            using var span = tracer.StartSpan(nameof(ClearDeadLettersAsync));
             long total = 0;
             try
             {

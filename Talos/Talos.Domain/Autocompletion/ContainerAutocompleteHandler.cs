@@ -7,8 +7,8 @@ using Talos.Docker.Abstractions;
 namespace Talos.Domain.Autocompletion
 {
     public class ContainerAutocompleteHandler(IDockerClientFactory dockerClientFactory,
-        ITracer<ApiIntegrationAutocompleteProvider> tracer,
-        ILogger<ApiIntegrationAutocompleteProvider> logger
+        ITracer<ContainerAutocompleteHandler> tracer,
+        ILogger<ContainerAutocompleteHandler> logger
         ) : AutocompleteHandler
     {
         public override async Task<AutocompletionResult> GenerateSuggestionsAsync(IInteractionContext context, IAutocompleteInteraction autocompleteInteraction, IParameterInfo parameter, IServiceProvider services)

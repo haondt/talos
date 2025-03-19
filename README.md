@@ -298,3 +298,31 @@ The only required configuration is the base URL for webhook generation.
 <div align="center">
     <img src="docs/images/webhooks2.png">
 </div>
+
+## Tracing
+
+Talos provides logs in structured json format and can optionally emit traces using OpenTelemetry.
+To use message tracing, enable it and configure the OpenTelemetry endpoint.
+
+```json
+{
+    "TracingSettings": {
+        "Enabled": true,
+        "Endpoint": "http://localhost:4317",
+        "Protocol": "Grpc",
+        "IncludeTraceLibraries": {
+            "StackExchange.Redis": false
+        }
+    }
+}
+```
+
+Logs will be enriched with a `TraceId` that can be used for correlation.
+
+<div align="center">
+    <img src="docs/images/tracing1.png">
+</div>
+
+<div align="center">
+    <img src="docs/images/tracing2.png">
+</div>
