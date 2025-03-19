@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Diagnostics.Contracts;
 using System.Text;
+using Talos.Core.Abstractions;
 using Talos.Integration.Command.Models;
 using CommandExecutionException = Talos.Integration.Command.Exceptions.CommandExecutionException;
 using CommandResult = Talos.Integration.Command.Models.CommandResult;
@@ -16,9 +17,10 @@ namespace Talos.Integration.Command.Services
         CliWrap.Command Command,
         CommandOptions Options,
         CommandSettings Settings,
+        ITracer<CommandBuilder> Tracer,
         ILogger<CommandBuilder> Logger)
     {
-        public static CommandBuilder Wrap(string command, CommandSettings settings, ILogger<CommandBuilder> logger)
+        public static CommandBuilder Wrap(string command, CommandSettings settings, ITracer<CommandBuilder> tracer, ILogger<CommandBuilder> logger)
         {
             return new CommandBuilder(
                 Cli.Wrap(command),
@@ -27,6 +29,7 @@ namespace Talos.Integration.Command.Services
                     Command = command
                 },
                 settings,
+                tracer,
                 logger);
         }
 
@@ -90,6 +93,7 @@ namespace Talos.Integration.Command.Services
 
         public async Task<CommandResult> ExecuteAsync(PipeTarget? pipeStdOut = null, bool captureStdOut = false, CancellationToken? cancellationToken = null)
         {
+            using var span = Tracer.StartSpan($"{nameof(ExecuteAsync)}:{Options.Command}");
             var maskedCommand = Options.SensitiveDataToMask.As(q => MaskSensitiveData(Options.Command, q)).Or(Options.Command);
             var maskedArguments = Options.SensitiveDataToMask.As(q => MaskSensitiveData(Command.Arguments, q)).Or(Command.Arguments);
 
@@ -100,6 +104,7 @@ namespace Talos.Integration.Command.Services
                 var result = await InternalExecuteAsync(pipeStdOut, captureStdOut, cancellationToken);
                 Logger.LogInformation("Completed command: {Command} {Arguments} in {Result}",
                     maskedCommand, maskedArguments, result.Duration);
+                span.SetStatusSuccess();
 
                 return result;
             }
@@ -118,6 +123,7 @@ namespace Talos.Integration.Command.Services
                 else
                     Logger.LogError(ex, "Command {Command} {Arguments} failed with no exit code.",
                         maskedCommand, maskedArguments);
+                span.SetStatusFailure(ex.GetType().ToString());
                 throw;
             }
         }

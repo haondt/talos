@@ -1,10 +1,12 @@
 ﻿using Discord;
+using Discord.Rest;
 using Discord.WebSocket;
 using Haondt.Core.Extensions;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using StackExchange.Redis;
 using System.Text;
+using Talos.Core.Abstractions;
 using Talos.Core.Models;
 using Talos.Discord.Models;
 using Talos.Domain.Abstractions;
@@ -15,6 +17,7 @@ using Talos.Renovate.Models;
 namespace Talos.Domain.Services
 {
     public class DiscordNotificationService(
+        ITracer<DiscordNotificationService> tracer,
         IOptions<DiscordSettings> discordSettings,
         DiscordSocketClient discordClient,
         IRedisProvider redisProvider,
@@ -29,6 +32,7 @@ namespace Talos.Domain.Services
         private async Task<ISocketMessageChannel> GetChannelAsync()
         {
             await clientState.StartTask;
+            using var _ = tracer.StartSpan(nameof(GetChannelAsync), SpanKind.Client);
             var channelId = discordSettings.Value.ChannelId;
             if (discordClient.GetChannel(channelId) is not ISocketMessageChannel channel)
                 throw new InvalidOperationException($"Failed to retrieve channel {channelId}");
@@ -37,6 +41,8 @@ namespace Talos.Domain.Services
 
         public async Task<string> CreateInteractionAsync(ImageUpdateIdentity id, ImageUpdate update)
         {
+            using var _ = tracer.StartSpan(nameof(CreateInteractionAsync), SpanKind.Client);
+
             var additionalDescriptionSb = new StringBuilder();
             additionalDescriptionSb.AppendLine("Would you like to");
             additionalDescriptionSb.AppendLine("- _push_ this update through to the host");
@@ -71,7 +77,10 @@ namespace Talos.Domain.Services
                         .WithButton(ignoreButton)])
                 .Build();
 
-            var message = await (await GetChannelAsync()).SendMessageAsync(embed: embed, components: component);
+            var channel = await GetChannelAsync();
+            RestUserMessage message;
+            using (tracer.StartSpan(nameof(ISocketMessageChannel.SendMessageAsync), SpanKind.Client))
+                message = await channel.SendMessageAsync(embed: embed, components: component);
             var messageId = message.Id.ToString();
             var interactionData = new DiscordImageUpdateInteractionData
             {
@@ -82,10 +91,15 @@ namespace Talos.Domain.Services
                 UpdateIdentity = id
             };
 
-            await _redis.StringSetAsync(RedisNamespacer.Discord.Interaction.ImageUpdate(messageId), JsonConvert.SerializeObject(interactionData, SerializationConstants.SerializerSettings));
-            await _redis.StringSetAsync(RedisNamespacer.Discord.Interaction.Component.Message(pushButtonId), messageId);
-            await _redis.StringSetAsync(RedisNamespacer.Discord.Interaction.Component.Message(deferButtonId), messageId);
-            await _redis.StringSetAsync(RedisNamespacer.Discord.Interaction.Component.Message(ignoreButtonId), messageId);
+            using (tracer.StartSpan(nameof(IDatabase.StringSetAsync), SpanKind.Client))
+            {
+                // _redis is an IDatabase instance
+                // is there a way to automatically inject my tracer class so that it wraps all redis calls in a span? 
+                await _redis.StringSetAsync(RedisNamespacer.Discord.Interaction.ImageUpdate(messageId), JsonConvert.SerializeObject(interactionData, SerializationConstants.SerializerSettings));
+                await _redis.StringSetAsync(RedisNamespacer.Discord.Interaction.Component.Message(pushButtonId), messageId);
+                await _redis.StringSetAsync(RedisNamespacer.Discord.Interaction.Component.Message(deferButtonId), messageId);
+                await _redis.StringSetAsync(RedisNamespacer.Discord.Interaction.Component.Message(ignoreButtonId), messageId);
+            }
             return messageId;
         }
 
@@ -109,6 +123,8 @@ namespace Talos.Domain.Services
 
         public async Task DeleteInteraction(string id)
         {
+            using var _ = tracer.StartSpan(nameof(DeleteInteraction), SpanKind.Client);
+
             var messageIdKey = RedisNamespacer.Discord.Interaction.ImageUpdate(id);
             var serialized = await _redis.StringGetAsync(messageIdKey);
             if (serialized.IsNullOrEmpty)
@@ -132,6 +148,8 @@ namespace Talos.Domain.Services
 
         private async Task CompleteImageUpdateInteractionAsync(string buttonId, SocketMessageComponent interaction)
         {
+            using var _ = tracer.StartSpan(nameof(CompleteImageUpdateInteractionAsync), SpanKind.Client);
+
             var componentKey = RedisNamespacer.Discord.Interaction.Component.Message(buttonId);
             var messageIdValue = await _redis.StringGetAsync(componentKey);
             if (messageIdValue.IsNull)
@@ -263,6 +281,7 @@ namespace Talos.Domain.Services
                 .WithTimestamp(DateTimeOffset.UtcNow)
                 .Build();
 
+            using var span = tracer.StartSpan(nameof(Notify), SpanKind.Client);
             await (await GetChannelAsync()).SendMessageAsync(embed: embed);
         }
     }

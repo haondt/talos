@@ -5,6 +5,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using StackExchange.Redis;
+using Talos.Core.Abstractions;
+using Talos.Core.Extensions;
 using Talos.Core.Models;
 using Talos.Renovate.Abstractions;
 using Talos.Renovate.Models;
@@ -12,12 +14,14 @@ using Talos.Renovate.Models;
 namespace Talos.Renovate.Services
 {
     public class PushQueueListener(IRedisProvider redisProvider,
+        ITracer<PushQueueListener> tracer,
         IOptions<UpdateThrottlingSettings> settings,
         ILogger<PushQueueMutator> _logger,
         IPushQueueMutator _throttlingService,
         IImageUpdaterService imageUpdaterService) : BackgroundService
     {
         private readonly IDatabase _queueDb = redisProvider.GetDatabase(settings.Value.RedisDatabase);
+        private const int REDIS_MAX_CHUNK_SIZE = 1000;
 
         protected override async Task ExecuteAsync(CancellationToken cancellationToken)
         {
@@ -37,6 +41,7 @@ namespace Talos.Renovate.Services
 
         private async Task<List<ScheduledPush>> GetPendingPushesAsync()
         {
+            using var _ = tracer.StartSpan(nameof(GetPendingPushesAsync));
             var keys = await _queueDb.SetMembersAsync(RedisNamespacer.Pushes.Queue);
             var pushes = new List<ScheduledPush>();
             foreach (var key in keys)
@@ -50,37 +55,64 @@ namespace Talos.Renovate.Services
 
         private async Task CompletePushesAsync(IEnumerable<ScheduledPush> pushes, IEnumerable<ScheduledPushDeadLetter> deadletters, AbsoluteDateTime now)
         {
-            foreach (var push in pushes)
+            foreach (var chunk in pushes.Chunk(REDIS_MAX_CHUNK_SIZE))
             {
-                var pushId = Guid.NewGuid().ToString();
-                await _queueDb.SortedSetAddAsync(RedisNamespacer.Pushes.Timestamps.Domain(push.Update.NewImage.Domain.Or("")), pushId, now.UnixTimeSeconds);
-                await _queueDb.SortedSetAddAsync(RedisNamespacer.Pushes.Timestamps.Repo(push.Target.GitRemoteUrl), pushId, now.UnixTimeSeconds);
+                var batch = _queueDb.CreateBatch().WithMethodTracing(tracer);
+                var tasks = new List<Task>();
+                foreach (var push in chunk)
+                {
+                    var pushId = Guid.NewGuid().ToString();
+                    tasks.Add(batch.SortedSetAddAsync(RedisNamespacer.Pushes.Timestamps.Domain(push.Update.NewImage.Domain.Or("")), pushId, now.UnixTimeSeconds));
+                    tasks.Add(batch.SortedSetAddAsync(RedisNamespacer.Pushes.Timestamps.Repo(push.Target.GitRemoteUrl), pushId, now.UnixTimeSeconds));
+                }
+                batch.Execute();
+                await Task.WhenAll(tasks);
             }
 
             var pushKeys = pushes.Select(p => (RedisValue)RedisNamespacer.Pushes.Push(p.Target.ToString())).ToArray();
             await _queueDb.SetRemoveAsync(RedisNamespacer.Pushes.Queue, pushKeys);
-            foreach (var key in pushKeys)
-                await _queueDb.KeyDeleteAsync(key.ToString());
+
+            foreach (var chunk in pushKeys.Chunk(REDIS_MAX_CHUNK_SIZE))
+            {
+                var batch = _queueDb.CreateBatch().WithMethodTracing(tracer);
+                var deleteTasks = chunk.Select(k => batch.KeyDeleteAsync(k.ToString())).ToList();
+                batch.Execute();
+                await Task.WhenAll(deleteTasks);
+            }
 
             var deadletterKeys = deadletters.Select(p => (RedisValue)RedisNamespacer.Pushes.Push(p.Push.Target.ToString())).ToArray();
             await _queueDb.SetRemoveAsync(RedisNamespacer.Pushes.Queue, deadletterKeys);
-            foreach (var deadletter in deadletters)
+
+            foreach (var chunk in deadletters.Chunk(REDIS_MAX_CHUNK_SIZE))
             {
-                var target = deadletter.Push.Target.ToString();
-                var pushKey = RedisNamespacer.Pushes.Push(target);
-                var deadLetterKey = RedisNamespacer.Pushes.DeadLetters.DeadLetter(target);
-                await _queueDb.StringSetAsync(deadLetterKey, JsonConvert.SerializeObject(deadletter, SerializationConstants.SerializerSettings));
-                await _queueDb.SetAddAsync(RedisNamespacer.Pushes.DeadLetters.Queue, deadLetterKey);
-                await _queueDb.KeyDeleteAsync(pushKey);
+                var batch = _queueDb.CreateBatch().WithMethodTracing(tracer);
+                var tasks = new List<Task>();
+                foreach (var deadletter in chunk)
+                {
+                    var target = deadletter.Push.Target.ToString();
+                    var pushKey = RedisNamespacer.Pushes.Push(target);
+                    var deadLetterKey = RedisNamespacer.Pushes.DeadLetters.DeadLetter(target);
+                    tasks.Add(batch.StringSetAsync(deadLetterKey, JsonConvert.SerializeObject(deadletter, SerializationConstants.SerializerSettings)));
+                    tasks.Add(batch.SetAddAsync(RedisNamespacer.Pushes.DeadLetters.Queue, deadLetterKey));
+                    tasks.Add(batch.KeyDeleteAsync(pushKey));
+                }
+                batch.Execute();
+                await Task.WhenAll(tasks);
             }
         }
 
         private async Task ProcessPushesAsync(CancellationToken? cancellationToken = default)
         {
+            var span = new Optional<ISpan>();
             await _throttlingService.AcquireQueueLock();
             try
             {
                 var pushes = await GetPendingPushesAsync();
+                if (pushes.Count == 0)
+                    return;
+
+                span = new(tracer.StartSpan(nameof(ProcessPushesAsync)));
+
                 var pushesByDomain = pushes.GroupBy(p => p.Update.NewImage.Domain.Or(""))
                     .ToDictionary(g => g.Key, g => g.ToList());
                 var allowedPushesByDomain = new List<ScheduledPush>();
@@ -142,9 +174,22 @@ namespace Talos.Renovate.Services
                     }
                 }
             }
+            catch (Exception ex) when (span.HasValue)
+            {
+                span.Value.SetStatusFailure(ex.Message);
+                throw;
+            }
             finally
             {
-                _throttlingService.ReleaseQueueLock();
+                try
+                {
+                    if (span.HasValue)
+                        span.Value.Dispose();
+                }
+                finally
+                {
+                    _throttlingService.ReleaseQueueLock();
+                }
             }
 
         }

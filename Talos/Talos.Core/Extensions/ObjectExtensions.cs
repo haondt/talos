@@ -1,4 +1,7 @@
-﻿using Haondt.Core.Models;
+﻿using Castle.DynamicProxy;
+using Haondt.Core.Models;
+using Talos.Core.Abstractions;
+using Talos.Core.Models;
 
 namespace Talos.Core.Extensions
 {
@@ -30,6 +33,12 @@ namespace Talos.Core.Extensions
             if (value == null)
                 return new();
             return new(value);
+        }
+
+        private static ProxyGenerator _proxyGenerator = new();
+        public static T WithMethodTracing<T>(this T obj, ITracer tracer) where T : class
+        {
+            return _proxyGenerator.CreateInterfaceProxyWithTarget(obj, new TracingInterceptor(tracer));
         }
     }
 }

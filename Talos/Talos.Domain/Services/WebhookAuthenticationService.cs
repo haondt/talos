@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Options;
 using StackExchange.Redis;
 using System.Security.Cryptography;
+using Talos.Core.Abstractions;
 using Talos.Core.Models;
 using Talos.Renovate.Abstractions;
 using Talos.Renovate.Models;
@@ -10,6 +11,7 @@ namespace Talos.Domain.Services
 {
     public class WebhookAuthenticationService(
         IOptions<RedisSettings> redisSettings,
+        ITracer<WebhookAuthenticationService> tracer,
         IRedisProvider redisProvider) : IWebHookAuthenticationService
     {
         private const int API_KEY_LENGTH_BITS = 512;
@@ -58,6 +60,7 @@ namespace Talos.Domain.Services
 
         public async Task<List<string>> ListApiTokensAsync()
         {
+            using var span = tracer.StartSpan(nameof(ListApiTokensAsync));
             var byName = RedisNamespacer.Webhooks.Tokens.ByName;
             var keys = await _redis.HashKeysAsync(byName);
             return keys.Select(k => k.ToString()).ToList();

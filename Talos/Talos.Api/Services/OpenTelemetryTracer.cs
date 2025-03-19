@@ -11,7 +11,7 @@ namespace Talos.Api.Services
 {
     public class OpenTelemetryTracer<TClass>(TracerProvider provider) : ITracer<TClass>
     {
-        private string _spanPrefix = typeof(TClass).Name + ".";
+        private string _spanPrefix = typeof(TClass).Name + ":";
         private Tracer _tracer = provider.GetTracer(
             typeof(TClass).Assembly.GetName().Name ?? "Default");
 

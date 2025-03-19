@@ -26,7 +26,7 @@ namespace Talos.Renovate.Extensions
             {
                 var redisSettings = sp.GetRequiredService<IOptions<RedisSettings>>();
                 var cm = ConnectionMultiplexer.Connect(redisSettings.Value.Endpoint);
-                return new RedisProvider(cm, redisSettings.Value.DefaultDatabase);
+                return ActivatorUtilities.CreateInstance<RedisProvider>(sp, cm, redisSettings.Value.DefaultDatabase);
             });
 
             services.AddSingleton<IGitHostServiceProvider, GitHostServiceProvider>();

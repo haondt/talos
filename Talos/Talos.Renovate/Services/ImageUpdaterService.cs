@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using StackExchange.Redis;
 using System.Text;
 using System.Text.RegularExpressions;
+using Talos.Core.Abstractions;
 using Talos.Core.Extensions;
 using Talos.Core.Models;
 using Talos.Integration.Command.Exceptions;
@@ -14,6 +15,7 @@ using Talos.Renovate.Models;
 namespace Talos.Renovate.Services
 {
     public partial class ImageUpdaterService(
+        ITracer<ImageUpdaterService> tracer,
         IOptions<ImageUpdateSettings> updateOptions,
         IOptions<ImageUpdaterSettings> options,
         ILogger<ImageUpdaterService> _logger,
@@ -73,9 +75,10 @@ namespace Talos.Renovate.Services
             }
         }
 
-        public Task<bool> CheckIfCommitBelongsToUs(string commit)
+        public async Task<bool> CheckIfCommitBelongsToUs(string commit)
         {
-            return _redis.SetContainsAsync(RedisNamespacer.Git.Commits, commit);
+            using var _ = tracer.StartSpan(nameof(CheckIfCommitBelongsToUs));
+            return await _redis.SetContainsAsync(RedisNamespacer.Git.Commits, commit);
         }
 
 

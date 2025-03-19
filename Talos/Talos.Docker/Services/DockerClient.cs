@@ -144,40 +144,5 @@ namespace Talos.Docker.Services
             return PrepareCommand(DockerConstants.DOCKER_BINARY, arguments);
         }
 
-        //private async Task<CommandResult> RunDockerComposeCommandAsync(string arguments)
-        //{
-        //    var binary = await _dockerComposeBinary;
-        //    var composeCommand = await _dockerVersion switch
-        //    {
-        //        DockerVersion.V1 => "",
-        //        DockerVersion.V2 => "compose",
-        //        _ => throw new InvalidOperationException($"Unknown docker version _dockerVersion")
-        //    };
-
-        //    return await _runner.RunCommandAsync(binary, $"{composeCommand} {arguments}");
-        //}
-
-        //public Task<CommandResult> ComposePull(string containerName)
-        //{
-        //    return RunDockerComposeCommandAsync($"pull {containerName}");
-        //}
-
-        //public Task<CommandResult> ComposeUp(string containerName)
-        //{
-        //    var forceRecreateFlag = _options.ForceRecreateOnUp ? "--force-recreate" : "";
-        //    return RunDockerComposeCommandAsync($"up -d --always-recreate-deps {forceRecreateFlag} {containerName}");
-        //}
-
-        //public Task<string> GetImage(string containerName)
-        //{
-        //    return RunDockerCommandAsync($"inspect --format='{{{{.Config.Image}}}}' {containerName}")
-        //        .ContinueWith(cr => cr.Result.AssertSuccessAndGetStdOut());
-        //}
-
-        //public Task<string> GetContainerImageDigest(string containerName)
-        //{
-        //    return RunDockerCommandAsync($"inspect --format='{{{{.Image}}}}' {containerName}")
-        //        .ContinueWith(cr => cr.Result.AssertSuccessAndGetStdOut());
-        //}
     }
 }
