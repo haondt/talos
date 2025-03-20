@@ -24,6 +24,7 @@ namespace Talos.Renovate.Tests
             var mockQueueMutator = new Mock<IPushQueueMutator>();
             var mockUpdateDataStorage = new Mock<IImageUpdateDataRepository>();
             return new ImageUpdaterService(
+                new FakeTracer<ImageUpdaterService>(),
                 Options.Create(new Models.ImageUpdateSettings
                 {
                 }),
@@ -39,7 +40,7 @@ namespace Talos.Renovate.Tests
                 mockGitService.Object,
                 mockQueueMutator.Object,
                 mockUpdateDataStorage.Object,
-                new ImageParser(Options.Create(new ImageParserSettings()))
+                new ImageParser(Options.Create(new ImageParserSettings()), new FakeLogger<ImageParser>())
                 );
         }
 

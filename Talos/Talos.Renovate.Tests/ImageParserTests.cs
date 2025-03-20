@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Options;
 using Talos.Renovate.Models;
+using Talos.Renovate.Tests.Fakes;
 
 namespace Talos.Renovate.Tests
 {
@@ -35,7 +36,7 @@ namespace Talos.Renovate.Tests
         [MemberData(nameof(GetTestData))]
         public void WillParseImages(string stringImage, ParsedImage parsedImage)
         {
-            var parser = new ImageParser(Options.Create(new ImageParserSettings()));
+            var parser = new ImageParser(Options.Create(new ImageParserSettings()), new FakeLogger<ImageParser>());
             parser.Parse(stringImage, false).Should().BeEquivalentTo(parsedImage);
         }
 
@@ -56,7 +57,7 @@ namespace Talos.Renovate.Tests
         [InlineData("my-registry.com/my-image", "my-registry.com/my-image")]
         public void WillInsertDefaultDomain(string inputImage, string outputImage)
         {
-            var parser = new ImageParser(Options.Create(new ImageParserSettings()));
+            var parser = new ImageParser(Options.Create(new ImageParserSettings()), new FakeLogger<ImageParser>());
             parser.Parse(inputImage, true).ToString().Should().BeEquivalentTo(outputImage);
         }
     }
