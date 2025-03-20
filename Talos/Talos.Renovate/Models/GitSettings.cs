@@ -2,5 +2,6 @@
 {
     public class GitSettings
     {
+        public string? WorkDirectory { get; set; }
     }
 }

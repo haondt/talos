@@ -85,7 +85,7 @@ namespace Talos.Renovate.Services
         {
             using var span = tracer.StartSpan($"{nameof(RunAsync)}");
             span.SetAttribute("Host", repositoryConfiguration.Host);
-            using var repoDir = await _git.CloneAsync(host, repositoryConfiguration);
+            using var repoDir = await _git.CloneAsync(host, repositoryConfiguration, depth: 1);
             var processingTasks = _dockerComposeFileService.ExtractUpdateTargets(repositoryConfiguration, repoDir.Path)
                 .Select(q =>
                 {
@@ -137,7 +137,7 @@ namespace Talos.Renovate.Services
         public async Task<(List<ScheduledPush> SuccessfulPushes, List<ScheduledPushDeadLetter> FailedPushes)> PushUpdates(HostConfiguration host, RepositoryConfiguration repositoryConfiguration, List<ScheduledPush> scheduledPushes, CancellationToken? cancellationToken = null)
         {
             using var _ = tracer.StartSpan(nameof(PushUpdates));
-            using var repoDir = await _git.CloneAsync(host, repositoryConfiguration);
+            using var repoDir = await _git.CloneAsync(host, repositoryConfiguration, depth: 1);
 
             // this will clone and checkout the target branch if its set, otherwise it will take the default branch
             var targetBranchName = await _git.GetNameOfCurrentBranchAsync(repoDir.Path);

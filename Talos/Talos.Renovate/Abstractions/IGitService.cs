@@ -5,7 +5,8 @@ namespace Talos.Renovate.Abstractions
     public interface IGitService
     {
         Task<bool> CheckIfHasUpstreamAsync(string repositoryDirectory, string? branchName = null);
-        Task<TemporaryDirectory> CloneAsync(HostConfiguration host, RepositoryConfiguration repository);
+        Task<TemporaryDirectory> CloneAsync(HostConfiguration host, RepositoryConfiguration repository,
+            int? depth = null);
         Task<string> Commit(string repositoryDirectory,
             string title,
             string? description = null,

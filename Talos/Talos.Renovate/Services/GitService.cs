@@ -79,9 +79,10 @@ namespace Talos.Renovate.Services
             return ($"{uri.Scheme}://{uri.Host}:{uri.Port}/{uri.AbsolutePath.TrimStart('/')}".TrimEnd('/'), []);
         }
 
-        public async Task<TemporaryDirectory> CloneAsync(HostConfiguration host, RepositoryConfiguration repository)
+        public async Task<TemporaryDirectory> CloneAsync(HostConfiguration host, RepositoryConfiguration repository,
+            int? depth = null)
         {
-            var repoDir = new TemporaryDirectory();
+            var repoDir = new TemporaryDirectory(_gitSettings.WorkDirectory);
             try
             {
                 var (url, sensitiveStrings) = GetAuthenticatedGitUrl(host, repository);
@@ -89,6 +90,7 @@ namespace Talos.Renovate.Services
                         .WithArguments(ab => ab
                             .Add("clone")
                             .AddIf(!string.IsNullOrEmpty(repository.Branch), ["-b", repository.Branch!])
+                            .AddIf(depth != null, ["--depth", depth.ToString()!])
                             .Add(url)
                             .Add(repoDir.Path));
                 foreach (var sensitiveString in sensitiveStrings)

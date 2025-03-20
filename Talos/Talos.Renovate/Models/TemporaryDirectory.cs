@@ -7,9 +7,9 @@
 
         public string Path { get; private set; }
 
-        public TemporaryDirectory(bool normalizeDirectoryOnDispose = true)
+        public TemporaryDirectory(string? rootPath = null, bool normalizeDirectoryOnDispose = true)
         {
-            Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"talos-{Guid.NewGuid()}");
+            Path = System.IO.Path.Combine(rootPath ?? System.IO.Path.GetTempPath(), $"talos-{Guid.NewGuid()}");
             Directory.CreateDirectory(Path);
             _normalizeDirectoryOnDispose = normalizeDirectoryOnDispose;
         }
@@ -23,7 +23,6 @@
                 var directory = new DirectoryInfo(Path) { Attributes = FileAttributes.Normal };
                 foreach (var info in directory.GetFileSystemInfos("*", SearchOption.AllDirectories))
                     info.Attributes = FileAttributes.Normal;
-
             }
             Directory.Delete(Path, true);
         }
