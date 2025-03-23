@@ -282,7 +282,15 @@ namespace Talos.Domain.Services
                 .Build();
 
             using var span = tracer.StartSpan(nameof(Notify), SpanKind.Client);
-            await (await GetChannelAsync()).SendMessageAsync(embed: embed);
+            try
+            {
+                await (await GetChannelAsync()).SendMessageAsync(embed: embed);
+            }
+            catch (Exception ex)
+            {
+                span.SetStatusFailure(ex.Message);
+                throw;
+            }
         }
     }
 
