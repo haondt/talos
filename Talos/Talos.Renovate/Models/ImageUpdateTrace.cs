@@ -5,10 +5,8 @@ namespace Talos.Renovate.Models
     public class ImageUpdateTrace
     {
         public required string Resolution { get; set; }
-        public string? DesiredImage { get; set; }
-        public AbsoluteDateTime? DesiredImageCreatedOn { get; set; }
-        public required string CurrentImage { get; set; }
-        public string? CachedImage { get; set; }
-        public AbsoluteDateTime? CachedImageCreatedOn { get; set; }
+        public Optional<ImageUpdateData> Cached { get; set; }
+        public Optional<IScheduledPush> Push { get; set; }
+        public required UpdateIdentity Identity { get; set; }
     }
 }

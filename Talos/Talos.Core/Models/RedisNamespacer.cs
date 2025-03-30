@@ -2,9 +2,10 @@
 {
     public static class RedisNamespacer
     {
+        public const string Version = "talos:v2";
         public static class Pushes
         {
-            private static readonly string Segment = "pushes";
+            private static readonly string Segment = $"{Version}:pushes";
             public static class Timestamps
             {
                 private static readonly string Segment = $"{Pushes.Segment}:timestamps";
@@ -22,23 +23,23 @@
             }
         }
 
-        public static string UpdateTarget(string id) => $"target:{id}";
+        public static string UpdateTarget(string id) => $"{Version}:target:{id}";
         public static class Skopeo
         {
-            private static readonly string Segment = "skopeo";
+            private static readonly string Segment = $"{Version}:skopeo";
             public static string Tags(string id) => $"{Segment}:tags:{id}";
             public static string Inspect(string id) => $"{Segment}:inspect:{id}";
         }
 
         public static class Git
         {
-            private static readonly string Segment = "git";
+            private static readonly string Segment = $"{Version}:git";
             public static readonly string Commits = $"{Segment}:commits";
         }
 
         public static class Webhooks
         {
-            private static readonly string Segment = "webhooks";
+            private static readonly string Segment = $"{Version}:webhooks";
             public static class Tokens
             {
                 private static readonly string Segment = $"{Webhooks.Segment}:tokens";
@@ -49,7 +50,7 @@
 
         public static class Discord
         {
-            private static readonly string Segment = "discord";
+            private static readonly string Segment = $"{Version}:discord";
             public static class Interaction
             {
                 private static readonly string Segment = $"{Discord.Segment}:interaction";

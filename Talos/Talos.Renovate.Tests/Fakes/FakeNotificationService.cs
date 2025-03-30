@@ -5,7 +5,7 @@ namespace Talos.Renovate.Tests.Fakes
 {
     internal class FakeNotificationService : INotificationService
     {
-        public Task<string> CreateInteractionAsync(ImageUpdateIdentity id, ImageUpdate update)
+        public Task<string> CreateInteractionAsync(ScheduledPushWithIdentity push)
         {
             return Task.FromResult(Guid.NewGuid().ToString());
         }
@@ -15,12 +15,12 @@ namespace Talos.Renovate.Tests.Fakes
             return Task.CompletedTask;
         }
 
-        public Task Notify(ImageUpdateIdentity id, ImageUpdate update)
+        public Task Notify(PipelineCompletionEvent pipelineCompleted)
         {
             return Task.CompletedTask;
         }
 
-        public Task Notify(PipelineCompletionEvent pipelineCompleted)
+        public Task Notify(ScheduledPushWithIdentity push)
         {
             return Task.CompletedTask;
         }

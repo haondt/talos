@@ -1,16 +1,15 @@
 using Haondt.Core.Models;
 using Microsoft.Extensions.FileSystemGlobbing;
 using Microsoft.Extensions.FileSystemGlobbing.Abstractions;
-using Microsoft.Extensions.Logging;
 using System.Text.RegularExpressions;
 using Talos.Renovate.Abstractions;
 using Talos.Renovate.Models;
 
 namespace Talos.Renovate.Services
 {
-    public class DockerComposeFileService(ILogger<DockerComposeFileService> _logger) : IDockerComposeFileService
+    public class DockerComposeFileService
     {
-        public (string NewFileContents, Optional<string> PreviousImageString) SetServiceImage(
+        public static DetailedResult<(string NewFileContents, string PreviousImageString), string> SetServiceImage(
             string fileContents, string serviceName, string image)
         {
             var lines = fileContents.Split(Environment.NewLine);
@@ -87,14 +86,14 @@ namespace Talos.Renovate.Services
             }
 
             if (success)
-                return (string.Join(Environment.NewLine, outputLines), previousImageString);
+                return new((string.Join(Environment.NewLine, outputLines), previousImageString.Value!));
 
             if (!foundTargetService)
-                throw new ArgumentException($"Couldn't find service '{serviceName}'");
+                return new($"Couldn't find service '{serviceName}'");
             if (!foundImageField)
-                throw new ArgumentException($"No 'image' field found for service '{serviceName}'.");
+                return new($"No 'image' field found for service '{serviceName}'.");
 
-            throw new ArgumentException($"Failed to set services.'{serviceName}'.image");
+            return new($"Failed to set services.'{serviceName}'.image");
         }
 
 
@@ -102,12 +101,12 @@ namespace Talos.Renovate.Services
         {
             var matcher = new Matcher();
             matcher.AddExclude("**/.git/**");
-            if (repository.IncludeGlobs != null)
-                matcher.AddIncludePatterns(repository.IncludeGlobs);
+            if (repository.Glob.Dockerfile?.IncludeGlobs != null)
+                matcher.AddIncludePatterns(repository.Glob.Dockerfile.IncludeGlobs);
             else
                 matcher.AddInclude("**/docker-compose.yml");
-            if (repository.ExcludeGlobs != null)
-                matcher.AddExcludePatterns(repository.ExcludeGlobs);
+            if (repository.Glob.Dockerfile?.ExcludeGlobs != null)
+                matcher.AddExcludePatterns(repository.Glob.Dockerfile.ExcludeGlobs);
 
             var result = matcher.Execute(
                 new DirectoryInfoWrapper(
@@ -119,9 +118,9 @@ namespace Talos.Renovate.Services
             return files;
         }
 
-        public List<(ImageUpdateIdentity Id, TalosSettings Configuration, string Image)> ExtractUpdateTargets(RepositoryConfiguration repository, string clonedRepositoryDirectory)
+        public static List<DetailedResult<IUpdateLocation, string>> ExtractUpdateTargets(RepositoryConfiguration repository, string clonedRepositoryDirectory, IImageParser imageParser)
         {
-            var images = new List<(ImageUpdateIdentity, TalosSettings, string)>();
+            var images = new List<DetailedResult<IUpdateLocation, string>>();
 
             foreach (var (absoluteFilePath, relativeFilePath) in GetTargetFiles(clonedRepositoryDirectory, repository))
             {
@@ -132,11 +131,11 @@ namespace Talos.Renovate.Services
 
                 foreach (var service in yaml.Services)
                 {
-                    var id = new ImageUpdateIdentity(repository.NormalizedUrl, relativeFilePath, service.Key);
+                    var coordinates = new DockerComposeUpdateLocationCoordinates { RelativeFilePath = relativeFilePath, ServiceKey = service.Key };
 
                     if (string.IsNullOrEmpty(service.Value.Image))
                     {
-                        _logger.LogWarning("Skipping image {Image} due to missing image tag...", id);
+                        images.Add(new($"{coordinates}: missing image tag"));
                         continue;
                     }
 
@@ -144,23 +143,46 @@ namespace Talos.Renovate.Services
                     if (service.Value.XTalos != null)
                         xTalos = service.Value.XTalos;
                     else if (!string.IsNullOrEmpty(service.Value.XTalosShort))
-                        xTalos = TalosSettings.ParseShortForm(service.Value.XTalosShort);
+                    {
+                        var shortFormParsedResult = TalosSettings.ParseShortForm(service.Value.XTalosShort);
+                        if (!shortFormParsedResult.IsSuccessful)
+                        {
+                            images.Add((new(shortFormParsedResult.Reason)));
+                            continue;
+                        }
+                        xTalos = shortFormParsedResult.Value;
+                    }
                     else
                     {
-                        _logger.LogWarning("Skipping image {Image} due to missing talos extension...", id);
+                        images.Add(new($"{coordinates}: missing talos extension"));
                         continue;
                     }
 
                     if (xTalos.Skip)
+                        continue;
+
+                    var parsedImage = imageParser.TryParse(service.Value.Image);
+                    if (!parsedImage.HasValue)
                     {
-                        _logger.LogInformation("Skipping image {Image} due to configured skip...", id);
+                        images.Add(new($"{coordinates}: couldn't parse image {service.Value.Image}"));
                         continue;
                     }
 
-                    images.Add((
-                        new(repository.NormalizedUrl, relativeFilePath, service.Key),
-                        xTalos,
-                        service.Value.Image));
+                    var state = new DockerComposeUpdateLocationState
+                    {
+                        Configuration = xTalos,
+                        Snapshot = new()
+                        {
+                            RawCurrentImageString = service.Value.Image,
+                            CurrentImage = parsedImage.Value
+                        }
+                    };
+
+                    images.Add(new(new DockerComposeUpdateLocation
+                    {
+                        Coordinates = coordinates,
+                        State = state
+                    }));
                 }
             }
 

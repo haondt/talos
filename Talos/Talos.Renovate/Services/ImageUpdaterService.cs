@@ -3,7 +3,6 @@ using Haondt.Core.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using StackExchange.Redis;
-using System.Text;
 using System.Text.RegularExpressions;
 using Talos.Core.Abstractions;
 using Talos.Core.Extensions;
@@ -23,7 +22,6 @@ namespace Talos.Renovate.Services
         ISkopeoService _skopeoService,
         IRedisProvider redisProvider,
         IGitHostServiceProvider gitHostServiceProvider,
-        IDockerComposeFileService _dockerComposeFileService,
         IGitService _git,
         IPushQueueMutator _pushQueue,
         IImageUpdateDataRepository updateDataRepository,
@@ -86,19 +84,71 @@ namespace Talos.Renovate.Services
             using var span = tracer.StartSpan($"{nameof(RunAsync)}");
             span.SetAttribute("Host", repositoryConfiguration.Host);
             using var repoDir = await _git.CloneAsync(host, repositoryConfiguration, depth: 1);
-            var processingTasks = _dockerComposeFileService.ExtractUpdateTargets(repositoryConfiguration, repoDir.Path)
-                .Select(q =>
+
+            var targets = new List<(UpdateIdentity Id, IUpdateLocation Location)>();
+            var syncedTargets = new Dictionary<string, List<ISubatomicUpdateLocation>>();
+
+            List<DetailedResult<IUpdateLocation, string>> locationResults = [];
+            locationResults.AddRange(DockerComposeFileService.ExtractUpdateTargets(repositoryConfiguration, repoDir.Path, _imageParser));
+            locationResults.AddRange(DockerfileService.ExtractUpdateTargets(repositoryConfiguration, repoDir.Path, _imageParser));
+            foreach (var result in locationResults)
+            {
+                if (!result.IsSuccessful)
                 {
-                    try
-                    {
-                        return ProcessService(q.Id, q.Configuration, q.Image);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Processing update for image {Image} failed due to exception: {ExceptionMessage}", q.Id, ex.Message);
-                        return Task.FromResult(new Optional<ScheduledPush>());
-                    }
-                });
+                    _logger.LogWarning("Failed to extract update target on repository {Repository} for image due to error {Error}.", repositoryConfiguration.NormalizedUrl, result.Reason);
+                    continue;
+                }
+
+                if (result.Value.State.Configuration.Sync != null)
+                {
+                    if (result.Value is not ISubatomicUpdateLocation subatomicUpdateLocation)
+                        throw new InvalidOperationException($"Cannot interpret location of type {result.Value.GetType()} at {result.Value.Coordinates} in repository {repositoryConfiguration.NormalizedUrl} as {typeof(ISubatomicUpdateLocationState)}.");
+
+
+                    if (!syncedTargets.TryGetValue(result.Value.State.Configuration.Sync.Group, out var syncGroup))
+                        syncGroup = syncedTargets[result.Value.State.Configuration.Sync.Group] = [];
+
+                    syncGroup.Add(subatomicUpdateLocation);
+                }
+
+                targets.Add((result.Value.Coordinates.GetIdentity(repositoryConfiguration.NormalizedUrl), result.Value));
+            }
+
+            foreach (var (group, groupTargets) in syncedTargets)
+            {
+                var parents = groupTargets.Where(t => t.State.Configuration.Sync!.Role == SyncRole.Parent).ToList();
+
+                if (parents.Count > 1)
+                {
+                    _logger.LogWarning("Failed to create synchronized update group {Group} due to multiple parents: {Parents}", group, parents.Select(q => q.Coordinates.GetIdentity(repositoryConfiguration.NormalizedUrl)).ToList());
+                    continue;
+                }
+
+                if (parents.Count == 0)
+                {
+                    _logger.LogWarning("Couldn't find a parent for group {Group}", group);
+                    continue;
+                }
+
+                var parent = parents[0];
+
+                var id = UpdateIdentity.Atomic(repositoryConfiguration.NormalizedUrl, groupTargets.Select(q => q.Coordinates.GetIdentity(repositoryConfiguration.NormalizedUrl)));
+                var location = AtomicUpdateLocation.Create(parent.State.Configuration, groupTargets);
+                targets.Add((id, location));
+            }
+
+            var processingTasks = targets.Select(async q =>
+            {
+                try
+                {
+                    return await ProcessServiceAsync(q.Id, q.Location);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Processing update for image {Image} failed due to exception: {ExceptionMessage}", q.Id, ex.Message);
+                    return new Optional<ScheduledPushWithIdentity>();
+                }
+            });
 
             var scheduledPushes = (await Task.WhenAll(processingTasks))
                 .Where(p => p.HasValue)
@@ -119,13 +169,14 @@ namespace Talos.Renovate.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Enqueueing push {Push} failed due to exception: {Exception}", push.Target, ex.Message);
+                    _logger.LogError(ex, "Enqueueing push {Push} failed due to exception: {Exception}", push.Identity, ex.Message);
                     exceptions.Add(ex);
                 }
             }
             if (exceptions.Count > 0)
                 throw new AggregateException(exceptions);
         }
+
 
         public (HostConfiguration Host, RepositoryConfiguration Repository) GetRepositoryConfiguration(string remoteUrl)
         {
@@ -134,7 +185,7 @@ namespace Talos.Renovate.Services
             return (hostConfiguration, repositoryConfiguration);
         }
 
-        public async Task<(List<ScheduledPush> SuccessfulPushes, List<ScheduledPushDeadLetter> FailedPushes)> PushUpdates(HostConfiguration host, RepositoryConfiguration repositoryConfiguration, List<ScheduledPush> scheduledPushes, CancellationToken? cancellationToken = null)
+        public async Task<(List<ScheduledPushWithIdentity> SuccessfulPushes, List<ScheduledPushDeadLetter> FailedPushes)> PushUpdates(HostConfiguration host, RepositoryConfiguration repositoryConfiguration, List<ScheduledPushWithIdentity> scheduledPushes, CancellationToken? cancellationToken = null)
         {
             using var _ = tracer.StartSpan(nameof(PushUpdates));
             using var repoDir = await _git.CloneAsync(host, repositoryConfiguration, depth: 1);
@@ -145,41 +196,18 @@ namespace Talos.Renovate.Services
                 await _git.CreateAndCheckoutBranch(repoDir.Path, GetUpdatesBranchName(targetBranchName));
 
             var deadletters = new List<ScheduledPushDeadLetter>();
-            var stagedPushes = new List<ScheduledPush>();
+            var stagedPushes = new List<(ScheduledPushWithIdentity Push, IUpdateLocationSnapshot Snapshot)>();
 
             foreach (var push in scheduledPushes)
             {
-                try
+                var writeResult = push.Push.Writer.Write(repoDir.Path);
+                if (!writeResult.IsSuccessful)
                 {
-
-                    var filePath = Path.Combine(repoDir.Path, push.Target.RelativeFilePath);
-                    if (!File.Exists(filePath))
-                    {
-                        deadletters.Add(new(push, $"Could not find file at {push.Target.RelativeFilePath}"));
-                        continue;
-                    }
-                    var content = File.ReadAllText(filePath);
-                    var (updatedContent, previousImageString) = _dockerComposeFileService.SetServiceImage(content, push.Target.ServiceKey, push.Update.NewImage.ToString());
-                    if (!previousImageString.HasValue)
-                    {
-                        deadletters.Add(new(push, $"Could not find target at {push.Target.RelativeFilePath}:{push.Target.ServiceKey}"));
-                        continue;
-                    }
-                    if (previousImageString.Equals(push.Update.PreviousImage.ToString()))
-                    {
-                        deadletters.Add(new(push, $"Expected previous image {push.Update.PreviousImage.ToString()} does not match the actual previous image {previousImageString}"));
-                        continue;
-                    }
-
-                    File.WriteAllText(filePath, updatedContent);
-                    stagedPushes.Add(push);
+                    deadletters.Add(new(push, writeResult.Reason));
+                    continue;
                 }
-                catch (Exception ex)
-                {
-                    deadletters.Add(new(push, ex.Message, ex.StackTrace.AsOptional()));
-                }
+                stagedPushes.Add((push, writeResult.Value));
             }
-
 
             if (stagedPushes.Count == 0)
                 return ([], deadletters);
@@ -188,14 +216,8 @@ namespace Talos.Renovate.Services
             {
 
                 var commitTitle = "[Talos] Updating images";
-                var commitDescriptionSb = new StringBuilder();
-                foreach (var grp in scheduledPushes.GroupBy(q => q.Target.RelativeFilePath))
-                {
-                    commitDescriptionSb.AppendLine(grp.Key);
-                    foreach (var push in grp)
-                        commitDescriptionSb.AppendLine($"  {push.Target.ServiceKey}: {push.Update.PreviousImage.ToShortString()} -> {push.Update.NewImage.ToShortString()}");
-                }
-                var commit = await _git.Commit(repoDir.Path, commitTitle, description: commitDescriptionSb.ToString(), all: true);
+                var commiteDescription = string.Join(Environment.NewLine, scheduledPushes.Select(q => q.Push.CommitMessage));
+                var commit = await _git.Commit(repoDir.Path, commitTitle, description: commiteDescription, all: true);
                 await _redis.SetAddAsync(RedisNamespacer.Git.Commits, commit);
 
                 var gitHost = gitHostServiceProvider.GetGitHost(host);
@@ -229,7 +251,6 @@ namespace Talos.Renovate.Services
                         try
                         {
                             await _git.PullAsync(repoDir.Path, rebase: true);
-
                         }
                         catch (CommandExecutionException ex2) when (Regex.IsMatch(ex2.Result.StdOut.Or(""), @".*\bCONFLICT\b.*\bMerge conflict\b.*"))
                         {
@@ -242,7 +263,7 @@ namespace Talos.Renovate.Services
             }
             catch (Exception ex)
             {
-                return ([], deadletters.Concat(stagedPushes.Select(p => new ScheduledPushDeadLetter(p, $"Exception thrown during git operations: {ex.Message}", ex.StackTrace.AsOptional()))).ToList());
+                return ([], deadletters.Concat(stagedPushes.Select(p => new ScheduledPushDeadLetter(p.Push, $"Exception thrown during git operations: {ex.Message}", ex.StackTrace.AsOptional()))).ToList());
             }
 
             // since we have already pushed the change, we can't really fail out of this
@@ -252,14 +273,14 @@ namespace Talos.Renovate.Services
             {
                 try
                 {
-                    await CompletePushAsync(push);
+                    await CompletePushAsync(push.Push, push.Snapshot);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Ran into exception while completing push for push {Push}: {ExceptionMessage}", push.Target.ToString(), ex.Message);
+                    _logger.LogError(ex, "Ran into exception while completing push for push {Push}: {ExceptionMessage}", push.Push.Identity, ex.Message);
                 }
             }
-            return (stagedPushes, deadletters);
+            return (stagedPushes.Select(p => p.Push).ToList(), deadletters);
         }
 
     }

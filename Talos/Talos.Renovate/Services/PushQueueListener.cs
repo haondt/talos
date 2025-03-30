@@ -1,5 +1,4 @@
-﻿using Haondt.Core.Extensions;
-using Haondt.Core.Models;
+﻿using Haondt.Core.Models;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -14,6 +13,52 @@ using Talos.Renovate.Models;
 
 namespace Talos.Renovate.Services
 {
+    public class PushCapacityCalculator(UpdateThrottlingSettings Settings)
+    {
+        public Dictionary<string, Optional<int>> AvailablePushCapacityByDomain { get; set; } = [];
+
+        public AbsoluteDateTime Now { get; set; } = AbsoluteDateTime.Now;
+        public async Task<bool> TryConsumePushCapacityAsync(IReadOnlyDictionary<string, int> domains, IDatabase queueDb)
+        {
+            foreach (var (domain, count) in domains)
+            {
+                if (count == 0)
+                    return true;
+
+                if (!AvailablePushCapacityByDomain.TryGetValue(domain, out var capacity))
+                {
+                    if (!Settings.Domains.TryGetValue(domain, out var throttlingConfiguration))
+                    {
+                        AvailablePushCapacityByDomain[domain] = new();
+                        return true;
+                    }
+                    var windowStart = Now with { UnixTimeSeconds = Now.UnixTimeSeconds - (int)throttlingConfiguration.Per };
+                    var pushesInTheLast = await queueDb.SortedSetLengthAsync(RedisNamespacer.Pushes.Timestamps.Domain(domain), windowStart.UnixTimeSeconds, AbsoluteDateTime.MaxValue.UnixTimeSeconds);
+                    capacity = AvailablePushCapacityByDomain[domain] = throttlingConfiguration.Limit - (int)pushesInTheLast;
+                }
+
+                if (!capacity.HasValue)
+                    return true;
+
+                if (capacity.Value < count)
+                    return false;
+            }
+
+            foreach (var (domain, count) in domains)
+                if (AvailablePushCapacityByDomain.TryGetValue(domain, out var capacity) && capacity.HasValue)
+                    AvailablePushCapacityByDomain[domain] = capacity.Value - count;
+            return true;
+        }
+
+        public Dictionary<string, ThrottlingConfiguration> GetThrottlingConfigurations(IEnumerable<string> domains)
+        {
+            return domains
+                .Select(q => (q, Settings.Domains.TryGetValue(q, out var throttlingConfiguration), throttlingConfiguration))
+                .Where(q => q.Item2)
+                .ToDictionary(q => q.q, q => q.throttlingConfiguration!);
+        }
+    }
+
     public class PushQueueListener(IRedisProvider redisProvider,
         ITracer<IBatch> batchTracer,
         ITracer<PushQueueListener> tracer,
@@ -41,21 +86,21 @@ namespace Talos.Renovate.Services
             }
         }
 
-        private async Task<List<ScheduledPush>> GetPendingPushesAsync()
+        private async Task<List<ScheduledPushWithIdentity>> GetPendingPushesAsync()
         {
             using var _ = tracer.StartSpan(nameof(GetPendingPushesAsync), traceLevel: TraceLevel.Verbose);
             var keys = await _queueDb.SetMembersAsync(RedisNamespacer.Pushes.Queue);
-            var pushes = new List<ScheduledPush>();
+            var pushes = new List<ScheduledPushWithIdentity>();
             foreach (var key in keys)
             {
                 var value = await _queueDb.StringGetAsync(key.ToString());
                 if (!value.IsNull)
-                    pushes.Add(JsonConvert.DeserializeObject<ScheduledPush>(value.ToString(), SerializationConstants.SerializerSettings));
+                    pushes.Add(JsonConvert.DeserializeObject<ScheduledPushWithIdentity>(value.ToString(), SerializationConstants.SerializerSettings));
             }
             return pushes;
         }
 
-        private async Task CompletePushesAsync(IEnumerable<ScheduledPush> pushes, IEnumerable<ScheduledPushDeadLetter> deadletters, AbsoluteDateTime now)
+        private async Task CompletePushesAsync(IEnumerable<ScheduledPushWithIdentity> pushes, IEnumerable<ScheduledPushDeadLetter> deadletters, AbsoluteDateTime now)
         {
             foreach (var chunk in pushes.Chunk(REDIS_MAX_CHUNK_SIZE))
             {
@@ -64,14 +109,15 @@ namespace Talos.Renovate.Services
                 foreach (var push in chunk)
                 {
                     var pushId = Guid.NewGuid().ToString();
-                    tasks.Add(batch.SortedSetAddAsync(RedisNamespacer.Pushes.Timestamps.Domain(push.Update.NewImage.Domain.Or("")), pushId, now.UnixTimeSeconds));
-                    tasks.Add(batch.SortedSetAddAsync(RedisNamespacer.Pushes.Timestamps.Repo(push.Target.GitRemoteUrl), pushId, now.UnixTimeSeconds));
+                    foreach (var (domain, _) in push.Push.UpdatesPerDomain)
+                        tasks.Add(batch.SortedSetAddAsync(RedisNamespacer.Pushes.Timestamps.Domain(domain), pushId, now.UnixTimeSeconds));
+                    tasks.Add(batch.SortedSetAddAsync(RedisNamespacer.Pushes.Timestamps.Repo(push.Identity.GitRemoteUrl), pushId, now.UnixTimeSeconds));
                 }
                 batch.Execute();
                 await Task.WhenAll(tasks);
             }
 
-            var pushKeys = pushes.Select(p => (RedisValue)RedisNamespacer.Pushes.Push(p.Target.ToString())).ToArray();
+            var pushKeys = pushes.Select(p => (RedisValue)RedisNamespacer.Pushes.Push(p.Identity.ToString())).ToArray();
             await _queueDb.SetRemoveAsync(RedisNamespacer.Pushes.Queue, pushKeys);
 
             foreach (var chunk in pushKeys.Chunk(REDIS_MAX_CHUNK_SIZE))
@@ -82,7 +128,7 @@ namespace Talos.Renovate.Services
                 await Task.WhenAll(deleteTasks);
             }
 
-            var deadletterKeys = deadletters.Select(p => (RedisValue)RedisNamespacer.Pushes.Push(p.Push.Target.ToString())).ToArray();
+            var deadletterKeys = deadletters.Select(p => (RedisValue)RedisNamespacer.Pushes.Push(p.Push.Identity.ToString())).ToArray();
             await _queueDb.SetRemoveAsync(RedisNamespacer.Pushes.Queue, deadletterKeys);
 
             foreach (var chunk in deadletters.Chunk(REDIS_MAX_CHUNK_SIZE))
@@ -91,9 +137,9 @@ namespace Talos.Renovate.Services
                 var tasks = new List<Task>();
                 foreach (var deadletter in chunk)
                 {
-                    var target = deadletter.Push.Target.ToString();
-                    var pushKey = RedisNamespacer.Pushes.Push(target);
-                    var deadLetterKey = RedisNamespacer.Pushes.DeadLetters.DeadLetter(target);
+                    var target = deadletter.Push.Identity;
+                    var pushKey = RedisNamespacer.Pushes.Push(target.ToString());
+                    var deadLetterKey = RedisNamespacer.Pushes.DeadLetters.DeadLetter(target.ToString());
                     tasks.Add(batch.StringSetAsync(deadLetterKey, JsonConvert.SerializeObject(deadletter, SerializationConstants.SerializerSettings)));
                     tasks.Add(batch.SetAddAsync(RedisNamespacer.Pushes.DeadLetters.Queue, deadLetterKey));
                     tasks.Add(batch.KeyDeleteAsync(pushKey));
@@ -102,6 +148,7 @@ namespace Talos.Renovate.Services
                 await Task.WhenAll(tasks);
             }
         }
+
 
         private async Task ProcessPushesAsync(CancellationToken? cancellationToken = default)
         {
@@ -114,25 +161,26 @@ namespace Talos.Renovate.Services
                     return;
 
 
-                var pushesByDomain = pushes.GroupBy(p => p.Update.NewImage.Domain.Or(""))
-                    .ToDictionary(g => g.Key, g => g.ToList());
-                var allowedPushesByDomain = new List<ScheduledPush>();
+                var calculator = new PushCapacityCalculator(settings.Value);
+                var allowedPushesByDomain = new List<ScheduledPushWithIdentity>();
                 var now = AbsoluteDateTime.Now;
 
                 using (tracer.StartSpan(nameof(GetPendingPushesAsync), traceLevel: TraceLevel.Verbose))
-                    foreach (var (domain, domainPushes) in pushesByDomain)
+                {
+                    foreach (var push in pushes)
                     {
-                        if (string.IsNullOrEmpty(domain) || !settings.Value.Domains.TryGetValue(domain, out var throttlingConfiguration))
-                            allowedPushesByDomain.AddRange(domainPushes);
-                        else
+                        var targetDomains = push.Push.UpdatesPerDomain;
+
+                        if (targetDomains.Count == 0)
                         {
-                            var windowStart = now with { UnixTimeSeconds = now.UnixTimeSeconds - (int)throttlingConfiguration.Per };
-                            var pushesInTheLast = await _queueDb.SortedSetLengthAsync(RedisNamespacer.Pushes.Timestamps.Domain(domain), windowStart.UnixTimeSeconds, AbsoluteDateTime.MaxValue.UnixTimeSeconds);
-                            var available = throttlingConfiguration.Limit - (int)pushesInTheLast;
-                            if (available > 0)
-                                allowedPushesByDomain.AddRange(domainPushes.Take(available));
+                            allowedPushesByDomain.Add(push);
+                        }
+                        else if (await calculator.TryConsumePushCapacityAsync(targetDomains, _queueDb))
+                        {
+                            allowedPushesByDomain.Add(push);
                         }
                     }
+                }
 
                 if (allowedPushesByDomain.Count == 0)
                     return;
@@ -141,9 +189,9 @@ namespace Talos.Renovate.Services
                 using var _ = _logger.BeginScope(new Dictionary<string, object> { { "TraceId", span.Value!.TraceId } });
 
                 var pushesByRemote = allowedPushesByDomain
-                    .GroupBy(p => p.Target.GitRemoteUrl)
+                    .GroupBy(p => p.Identity.GitRemoteUrl)
                     .ToDictionary(p => p.Key, p => p.ToList());
-                var allowedPushesByRemote = new List<(HostConfiguration host, RepositoryConfiguration repository, List<ScheduledPush>)>();
+                var allowedPushesByRemote = new List<(HostConfiguration host, RepositoryConfiguration repository, List<ScheduledPushWithIdentity>)>();
 
                 foreach (var (remote, remotePushes) in pushesByRemote)
                 {

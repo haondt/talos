@@ -4,9 +4,9 @@ namespace Talos.Renovate.Abstractions
 {
     public interface INotificationService
     {
-        Task<string> CreateInteractionAsync(ImageUpdateIdentity id, ImageUpdate update);
+        Task<string> CreateInteractionAsync(ScheduledPushWithIdentity push);
         Task DeleteInteraction(string id);
-        Task Notify(ImageUpdateIdentity id, ImageUpdate update);
+        Task Notify(ScheduledPushWithIdentity push);
         Task Notify(PipelineCompletionEvent pipelineCompleted);
     }
 }

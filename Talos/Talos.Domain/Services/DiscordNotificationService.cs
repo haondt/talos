@@ -1,7 +1,6 @@
 ﻿using Discord;
 using Discord.Rest;
 using Discord.WebSocket;
-using Haondt.Core.Extensions;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using StackExchange.Redis;
@@ -39,7 +38,7 @@ namespace Talos.Domain.Services
             return channel;
         }
 
-        public async Task<string> CreateInteractionAsync(ImageUpdateIdentity id, ImageUpdate update)
+        public async Task<string> CreateInteractionAsync(ScheduledPushWithIdentity push)
         {
             using var _ = tracer.StartSpan(nameof(CreateInteractionAsync), SpanKind.Client);
 
@@ -49,7 +48,7 @@ namespace Talos.Domain.Services
             additionalDescriptionSb.AppendLine("- _defer_ this reminder until the next time the update process runs");
             additionalDescriptionSb.AppendLine("- _ignore_ this reminder and skip the update");
 
-            var embed = PrepareImageUpdateEmbed(id, update, additionalDescriptionSb.ToString())
+            var embed = PrepareImageUpdateEmbed(push, additionalDescriptionSb.ToString())
                 .Build();
 
             var buttonIdPrefix = $"{CompleteInteractionPrefix}-{ImageUpdateInteractionInfix}-";
@@ -87,14 +86,11 @@ namespace Talos.Domain.Services
                 DeferButtonId = deferButtonId,
                 PushButtonId = pushButtonId,
                 IgnoreButtonId = ignoreButtonId,
-                ImageUpdate = update,
-                UpdateIdentity = id
+                PendingPush = push,
             };
 
             using (tracer.StartSpan(nameof(IDatabase.StringSetAsync), SpanKind.Client))
             {
-                // _redis is an IDatabase instance
-                // is there a way to automatically inject my tracer class so that it wraps all redis calls in a span? 
                 await _redis.StringSetAsync(RedisNamespacer.Discord.Interaction.ImageUpdate(messageId), JsonConvert.SerializeObject(interactionData, SerializationConstants.SerializerSettings));
                 await _redis.StringSetAsync(RedisNamespacer.Discord.Interaction.Component.Message(pushButtonId), messageId);
                 await _redis.StringSetAsync(RedisNamespacer.Discord.Interaction.Component.Message(deferButtonId), messageId);
@@ -103,14 +99,12 @@ namespace Talos.Domain.Services
             return messageId;
         }
 
-        private static EmbedBuilder PrepareImageUpdateEmbed(ImageUpdateIdentity id, ImageUpdate update, string? extraDescription = null)
+        private static EmbedBuilder PrepareImageUpdateEmbed(ScheduledPushWithIdentity push, string? extraDescription = null)
         {
             var descriptionSb = new StringBuilder("**Image update available**\n");
-            descriptionSb.AppendLine($"-# {new Uri(id.GitRemoteUrl).AbsolutePath.Trim('/')} » {id.ServiceKey}");
-            descriptionSb.AppendLine($"-# {update.NewImage.ToShortString()} ({update.BumpSize.ToString().ToLower()})\n");
-            descriptionSb.AppendLine($"Current Version\n```\n{update.PreviousImage.ToString()}\n```");
-            descriptionSb.AppendLine($"New version\n-# _Created {update.NewImageCreatedOn.LocalTime.ToString("g")}_");
-            descriptionSb.AppendLine($"```\n{update.NewImage.ToString()}\n```");
+            descriptionSb.AppendLine($"-# {new Uri(push.Identity.GitRemoteUrl).AbsolutePath.Trim('/')} » {push.Identity.ShortFriendlyHashData}");
+            descriptionSb.AppendLine($"Current Version\n```\n{push.Push.CurrentVersionFriendlyString}\n```");
+            descriptionSb.AppendLine($"New version\n```\n{push.Push.NewVersionFriendlyString}\n```");
 
             if (!string.IsNullOrEmpty(extraDescription))
                 descriptionSb.AppendLine(extraDescription);
@@ -167,53 +161,40 @@ namespace Talos.Domain.Services
 
             if (buttonId == deserialized.PushButtonId)
             {
-                await pushQueue.UpsertAndEnqueuePushAsync(new()
-                {
-                    Target = deserialized.UpdateIdentity,
-                    Update = deserialized.ImageUpdate
-                });
+                await pushQueue.UpsertAndEnqueuePushAsync(deserialized.PendingPush);
                 resolution = ImageUpdateInteractionResolution.Push;
             }
             else if (buttonId == deserialized.DeferButtonId)
             {
-                await updateDataRepository.ClearImageUpdateDataCacheAsync(deserialized.UpdateIdentity);
+                await updateDataRepository.ClearImageUpdateDataCacheAsync(deserialized.PendingPush.Identity);
                 resolution = ImageUpdateInteractionResolution.Defer;
             }
             else if (buttonId == deserialized.IgnoreButtonId)
             {
-                var cached = (await updateDataRepository.TryGetImageUpdateDataAsync(deserialized.UpdateIdentity))
-                    .Or(new ImageUpdateData()
-                    {
-                        Image = deserialized.ImageUpdate.PreviousImage.ToString()
-                    });
-                cached.LastNotified = cached.LastNotified?.CreatedOn > deserialized.ImageUpdate.NewImageCreatedOn
-                    ? cached.LastNotified
-                    : new()
-                    {
-                        CreatedOn = deserialized.ImageUpdate.NewImageCreatedOn,
-                        Image = deserialized.ImageUpdate.NewImage.ToString()
-                    };
+                var cached = await updateDataRepository.TryGetImageUpdateDataAsync(deserialized.PendingPush.Identity);
+                if (!cached.IsSuccessful)
+                    throw new InvalidOperationException($"Unable to find image update data with identity {deserialized.PendingPush.Identity}");
 
-                if (cached.Interaction != null)
+                if (!cached.Value.LastNotified.HasValue || deserialized.PendingPush.Push.IsNewerThan(cached.Value.LastNotified.Value))
+                    cached.Value.LastNotified = new(deserialized.PendingPush.Push);
+
+                if (cached.Value.Interaction.HasValue)
                 {
-                    if (cached.Interaction.InteractionId == messageId)
-                        cached.Interaction.InteractionId = null;
-                    if (cached.Interaction.PendingImageCreatedOn < deserialized.ImageUpdate.NewImageCreatedOn)
-                    {
-                        cached.Interaction.PendingImageCreatedOn = deserialized.ImageUpdate.NewImageCreatedOn;
-                        cached.Interaction.PendingImage = deserialized.ImageUpdate.NewImage.ToString();
-                    }
+                    if (cached.Value.Interaction.Value.InteractionId.TryGetValue(out var value) && value == messageId)
+                        cached.Value.Interaction.Value.InteractionId = new();
+
+                    if (!cached.Value.Interaction.HasValue || deserialized.PendingPush.Push.IsNewerThan(cached.Value.Interaction.Value.PendingPush))
+                        cached.Value.Interaction.Value.PendingPush = deserialized.PendingPush.Push;
                 }
                 else
                 {
-                    cached.Interaction = new()
+                    cached.Value.Interaction = new(new()
                     {
-                        PendingImage = deserialized.ImageUpdate.NewImage.ToString(),
-                        PendingImageCreatedOn = deserialized.ImageUpdate.NewImageCreatedOn
-                    };
+                        PendingPush = deserialized.PendingPush.Push,
+                    });
                 }
 
-                await updateDataRepository.SetImageUpdateDataAsync(deserialized.UpdateIdentity, cached);
+                await updateDataRepository.SetImageUpdateDataAsync(deserialized.PendingPush.Identity, cached.Value);
                 resolution = ImageUpdateInteractionResolution.Ignore;
             }
             else
@@ -253,9 +234,9 @@ namespace Talos.Domain.Services
             await _redis.KeyDeleteAsync(RedisNamespacer.Discord.Interaction.Component.Message(deserialized.IgnoreButtonId));
         }
 
-        public async Task Notify(ImageUpdateIdentity id, ImageUpdate update)
+        public async Task Notify(ScheduledPushWithIdentity push)
         {
-            var embed = PrepareImageUpdateEmbed(id, update)
+            var embed = PrepareImageUpdateEmbed(push)
                 .Build();
             await (await GetChannelAsync()).SendMessageAsync(embed: embed);
         }

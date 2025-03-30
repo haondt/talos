@@ -40,5 +40,6 @@ namespace Talos.Core.Extensions
         {
             return _proxyGenerator.CreateInterfaceProxyWithTarget(obj, new TracingInterceptor(tracer));
         }
+
     }
 }

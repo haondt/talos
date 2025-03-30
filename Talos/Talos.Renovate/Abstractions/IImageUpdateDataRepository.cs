@@ -5,8 +5,8 @@ namespace Talos.Renovate.Abstractions
 {
     public interface IImageUpdateDataRepository
     {
-        Task<bool> SetImageUpdateDataAsync(ImageUpdateIdentity id, ImageUpdateData data);
-        Task<Optional<ImageUpdateData>> TryGetImageUpdateDataAsync(ImageUpdateIdentity id);
-        Task<bool> ClearImageUpdateDataCacheAsync(ImageUpdateIdentity id);
+        Task<bool> SetImageUpdateDataAsync(UpdateIdentity id, ImageUpdateData data);
+        Task<Result<ImageUpdateData>> TryGetImageUpdateDataAsync(UpdateIdentity id);
+        Task<bool> ClearImageUpdateDataCacheAsync(UpdateIdentity id);
     }
 }

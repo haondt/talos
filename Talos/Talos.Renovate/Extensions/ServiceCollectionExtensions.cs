@@ -15,7 +15,6 @@ namespace Talos.Renovate.Extensions
             services.AddSingleton<ISkopeoService, SkopeoService>();
             services.AddSingleton<IImageUpdaterService, ImageUpdaterService>();
             services.AddSingleton<IImageUpdateDataRepository, ImageUpdateDataRepository>();
-            services.AddSingleton<IDockerComposeFileService, DockerComposeFileService>();
             services.Configure<ImageUpdateSettings>(configuration.GetSection(nameof(ImageUpdateSettings)));
             ImageUpdateSettings.Validate(services.AddOptions<ImageUpdateSettings>()).ValidateOnStart();
             services.Configure<RedisSettings>(configuration.GetSection(nameof(RedisSettings)));

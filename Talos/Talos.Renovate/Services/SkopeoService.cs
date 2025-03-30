@@ -45,7 +45,7 @@ namespace Talos.Renovate.Services
 
         public async Task<SkopeoInspectResponse> Inspect(string image, CancellationToken? cancellationToken = null)
         {
-            var response = await PerformSkopeoOperation("inspect", RedisNamespacer.Skopeo.Tags(image), image, cancellationToken);
+            var response = await PerformSkopeoOperation("inspect", RedisNamespacer.Skopeo.Inspect(image), image, cancellationToken);
             var deserialized = JsonConvert.DeserializeObject<SkopeoInspectResponse>(response)
                 ?? throw new JsonSerializationException($"Failed to deserialize skopeo response for inspect {image}");
             return deserialized;

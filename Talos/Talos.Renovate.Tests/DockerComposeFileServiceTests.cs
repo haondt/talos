@@ -1,17 +1,11 @@
 ﻿using FluentAssertions;
 using Talos.Renovate.Models;
 using Talos.Renovate.Services;
-using Talos.Renovate.Tests.Fakes;
 
 namespace Talos.Renovate.Tests
 {
     public class DockerComposeFileTests
     {
-        private DockerComposeFileService GetSut()
-        {
-            return new DockerComposeFileService(new FakeLogger<DockerComposeFileService>());
-        }
-
         [Fact]
         public void WillNotMessWithOtherYamlData()
         {
@@ -117,8 +111,8 @@ volumes:
   vol1:
   vol2:
 ";
-            var (outputYaml, _) = GetSut().SetServiceImage(originalYaml, "app", "newimage:newtag");
-            outputYaml.Should().Be(expectedYaml);
+            var result = DockerComposeFileService.SetServiceImage(originalYaml, "app", "newimage:newtag");
+            result.Value.NewFileContents.Should().Be(expectedYaml);
         }
 
         [Fact]
@@ -129,8 +123,8 @@ volumes:
     image: oldimage:oldtag
 ";
 
-            0.Invoking(_ => GetSut().SetServiceImage(originalYaml, "nonexistent", "newimage:newtag"))
-                .Should().Throw<ArgumentException>();
+            var result = DockerComposeFileService.SetServiceImage(originalYaml, "nonexistent", "newimage:newtag");
+            result.IsSuccessful.Should().BeFalse();
         }
 
         [Fact]
@@ -141,8 +135,8 @@ volumes:
     image: &foo oldimage:oldtag
 ";
 
-            0.Invoking(_ => GetSut().SetServiceImage(originalYaml, "app", "newimage:newtag"))
-                .Should().Throw<ArgumentException>();
+            var result = DockerComposeFileService.SetServiceImage(originalYaml, "app", "newimage:newtag");
+            result.IsSuccessful.Should().BeFalse();
         }
         [Fact]
         public void WillThrowOnAnchorRefs()
@@ -152,8 +146,8 @@ volumes:
     image: *foo
 ";
 
-            0.Invoking(_ => GetSut().SetServiceImage(originalYaml, "app", "newimage:newtag"))
-                .Should().Throw<ArgumentException>();
+            var result = DockerComposeFileService.SetServiceImage(originalYaml, "app", "newimage:newtag");
+            result.IsSuccessful.Should().BeFalse();
         }
 
         [Fact]
@@ -169,8 +163,8 @@ x-yet-another-thing:
   app:
     image: foo
 ";
-            0.Invoking(_ => GetSut().SetServiceImage(originalYaml, "app", "bar"))
-                .Should().Throw<ArgumentException>();
+            var result = DockerComposeFileService.SetServiceImage(originalYaml, "app", "bar");
+            result.IsSuccessful.Should().BeFalse();
 
         }
 
@@ -193,8 +187,8 @@ x-yet-another-thing:
   app3:
     image: foo
 ";
-            var (outputYaml, _) = GetSut().SetServiceImage(originalYaml, "app", "bar");
-            outputYaml.Should().Be(expectedYaml);
+            var result = DockerComposeFileService.SetServiceImage(originalYaml, "app", "bar");
+            result.Value.NewFileContents.Should().Be(expectedYaml);
         }
 
         [Fact]
@@ -208,8 +202,8 @@ x-other:
   app:
     image: foo
 ";
-            0.Invoking(_ => GetSut().SetServiceImage(originalYaml, "app", "bar"))
-                .Should().Throw<ArgumentException>();
+            var result = DockerComposeFileService.SetServiceImage(originalYaml, "app", "bar");
+            result.IsSuccessful.Should().BeFalse();
         }
 
         [Fact]
@@ -231,8 +225,8 @@ x-other:
   app:
     image: bar
 ";
-            var (outputYaml, _) = GetSut().SetServiceImage(originalYaml, "app", "bar");
-            outputYaml.Should().Be(expectedYaml);
+            var result = DockerComposeFileService.SetServiceImage(originalYaml, "app", "bar");
+            result.Value.NewFileContents.Should().Be(expectedYaml);
         }
 
         [Theory]
@@ -291,13 +285,13 @@ x-other:
             if (shouldSucceed)
             {
 
-                var (outputYaml, _) = GetSut().SetServiceImage(originalYaml, "app", "bar");
-                outputYaml.Should().Be(expectedYaml);
+                var result = DockerComposeFileService.SetServiceImage(originalYaml, "app", "bar");
+                result.Value.NewFileContents.Should().Be(expectedYaml);
             }
             else
             {
-                0.Invoking(_ => GetSut().SetServiceImage(originalYaml, "app", "bar"))
-                    .Should().Throw<ArgumentException>();
+                var result = DockerComposeFileService.SetServiceImage(originalYaml, "app", "bar");
+                result.IsSuccessful.Should().BeFalse();
             }
         }
 
@@ -419,9 +413,9 @@ volumes:
 
 ";
 
-            var (outputYaml, _) = GetSut().SetServiceImage(originalYaml, "elysium-stage", "registry.gitlab.com/haondt/cicd/registry/elysium:0.1.0@sha256:ab42ae6871d9a12b90c7a259f808aade4d84496317a7e38621d7ebca07fc02f6");
-            (outputYaml, _) = GetSut().SetServiceImage(outputYaml, "elysium-stage-silo", "registry.gitlab.com/haondt/cicd/registry/elysium-silo:0.1.0@sha256:ab42ae6871d9a12b90c7a259f808aade4d84496317a7e38621d7ebca07fc02f6");
-            outputYaml.Should().Be(expectedYaml);
+            var result = DockerComposeFileService.SetServiceImage(originalYaml, "elysium-stage", "registry.gitlab.com/haondt/cicd/registry/elysium:0.1.0@sha256:ab42ae6871d9a12b90c7a259f808aade4d84496317a7e38621d7ebca07fc02f6");
+            result = DockerComposeFileService.SetServiceImage(result.Value.NewFileContents, "elysium-stage-silo", "registry.gitlab.com/haondt/cicd/registry/elysium-silo:0.1.0@sha256:ab42ae6871d9a12b90c7a259f808aade4d84496317a7e38621d7ebca07fc02f6");
+            result.Value.NewFileContents.Should().Be(expectedYaml);
         }
 
 
@@ -468,7 +462,7 @@ volumes:
         public void WillParseXTalosShortForm(string shortForm, TalosSettings expectedSettings)
         {
             var actualSettings = TalosSettings.ParseShortForm(shortForm);
-            actualSettings.Should().BeEquivalentTo(expectedSettings);
+            actualSettings.Value.Should().BeEquivalentTo(expectedSettings);
 
         }
     }

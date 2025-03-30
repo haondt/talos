@@ -18,7 +18,7 @@ namespace Talos.Renovate.Services
         private readonly SemaphoreSlim _queueLock = new(1, 1);
         private readonly IDatabase _queueDb = redisProvider.GetDatabase(settings.Value.RedisDatabase);
 
-        public async Task UpsertAndEnqueuePushAsync(ScheduledPush push)
+        public async Task UpsertAndEnqueuePushAsync(ScheduledPushWithIdentity push)
         {
             await _queueLock.WaitAsync();
             try
@@ -31,21 +31,20 @@ namespace Talos.Renovate.Services
             }
         }
 
-        public async Task UnsafeUpsertAndEnqueuePushAsync(ScheduledPush push)
+        public async Task UnsafeUpsertAndEnqueuePushAsync(ScheduledPushWithIdentity push)
         {
             using var span = tracer.StartSpan(nameof(UnsafeUpsertAndEnqueuePushAsync));
-            var key = RedisNamespacer.Pushes.Push(push.Target.ToString());
+            var key = RedisNamespacer.Pushes.Push(push.Identity.ToString());
             var value = JsonConvert.SerializeObject(push, SerializationConstants.SerializerSettings)
                 ?? throw new JsonSerializationException($"Failed to serialize scheduled push for target {key}");
 
             var existing = await _queueDb.StringGetAsync(key);
             if (!existing.IsNull)
             {
-                var deserialized = JsonConvert.DeserializeObject<ScheduledPush>(existing.ToString(), SerializationConstants.SerializerSettings);
-                if (deserialized.Update.NewImageCreatedOn > push.Update.NewImageCreatedOn)
+                var deserialized = JsonConvert.DeserializeObject<ScheduledPushWithIdentity>(existing.ToString(), SerializationConstants.SerializerSettings);
+                if (deserialized.Push.IsNewerThan(push.Push))
                 {
-                    _logger.LogInformation("Skipping enqueue for push {ScheduledPush} as there is one enqueued already with a newer update ({ProposedCreatedOn} vs {ExistingCreatedOn})",
-                        key, push.Update.NewImageCreatedOn, deserialized.Update.NewImageCreatedOn);
+                    _logger.LogInformation("Skipping enqueue for push {ScheduledPush} as there is one enqueued already with a newer update", key);
                     return;
                 }
             }

@@ -13,13 +13,20 @@ namespace Talos.Renovate.Tests
 {
     public class ImageUpdaterTests
     {
+        private readonly ImageParser _imageParser;
+
+        public ImageUpdaterTests()
+        {
+            _imageParser = new ImageParser(Options.Create(new ImageParserSettings()), new FakeLogger<ImageParser>());
+
+        }
+
         private ImageUpdaterService GetSut(FakeSkopeoService skopeoService)
         {
             var mockRedisDatabase = new Mock<IDatabase>();
             var mockRedisProvider = new Mock<IRedisProvider>();
             mockRedisProvider.Setup(q => q.GetDatabase(It.IsAny<int>())).Returns(mockRedisDatabase.Object);
             var mockGitHostProvider = new Mock<IGitHostServiceProvider>();
-            var mockDockerComposeFileService = new Mock<IDockerComposeFileService>();
             var mockGitService = new Mock<IGitService>();
             var mockQueueMutator = new Mock<IPushQueueMutator>();
             var mockUpdateDataStorage = new Mock<IImageUpdateDataRepository>();
@@ -36,11 +43,10 @@ namespace Talos.Renovate.Tests
                 skopeoService,
                 mockRedisProvider.Object,
                 mockGitHostProvider.Object,
-                mockDockerComposeFileService.Object,
                 mockGitService.Object,
                 mockQueueMutator.Object,
                 mockUpdateDataStorage.Object,
-                new ImageParser(Options.Create(new ImageParserSettings()), new FakeLogger<ImageParser>())
+                _imageParser
                 );
         }
 
@@ -306,16 +312,32 @@ namespace Talos.Renovate.Tests
             var sut = GetSut(new FakeSkopeoService(tagsByName, digestsByNameAndTag));
             var currentFullImage = currentTagAndDigest.As(q => $"{name}:{q}").Or(name);
             var becauseString = $"the image was {currentFullImage} with maxBump {maxBumpSize}";
-            var result = await sut.SelectUpdateTarget(currentFullImage, maxBumpSize, false);
-            result.HasValue.Should().Be(expectedResult.HasValue, becauseString);
+            var parsedImage = _imageParser.Parse(currentFullImage);
 
-            if (result.HasValue)
+            // this will only filter out tags based on tag itself, it doesn't look at digests at all
+            var result = await sut.GetSortedCandidateTagsAsync(parsedImage, maxBumpSize);
+            if (result.Count == 0)
             {
-                result.Value.NewImage.ToString().Should().Be($"{name}:{expectedResult.Value.TagAndDigest}", becauseString);
-                result.Value.BumpSize.Should().Be(expectedResult.Value.BumpSize, becauseString);
+                if (expectedResult.HasValue)
+                    result.Should().NotBeEmpty(becauseString);
+                return;
             }
+
+            var resultTag = result.First();
+            var (digest, _) = await sut.GetDigestAsync(parsedImage, resultTag);
+
+            // this will filter out tags that are the same as the current tag
+            var isUpgrade = sut.IsUpgrade(parsedImage.TagAndDigest, resultTag, digest);
+            if (!expectedResult.HasValue)
+            {
+                isUpgrade.HasValue.Should().BeFalse(becauseString);
+                return;
+            }
+            isUpgrade.HasValue.Should().BeTrue(becauseString);
+            isUpgrade.Value.Should().Be(expectedResult.Value.BumpSize);
+
+            var tagAndDigest = new ParsedTagAndDigest(Tag: resultTag, Digest: digest);
+            tagAndDigest.ToString().Should().BeEquivalentTo(expectedResult.Value.TagAndDigest, becauseString);
         }
-
-
     }
 }

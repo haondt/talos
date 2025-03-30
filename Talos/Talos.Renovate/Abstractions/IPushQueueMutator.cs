@@ -9,6 +9,6 @@ namespace Talos.Renovate.Abstractions
         Task<long> GetDeadLetterQueueSizeAsync();
         void ReleaseQueueLock();
         Task<long> ReplayDeadLettersAsync();
-        Task UpsertAndEnqueuePushAsync(ScheduledPush push);
+        Task UpsertAndEnqueuePushAsync(ScheduledPushWithIdentity push);
     }
 }

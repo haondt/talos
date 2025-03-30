@@ -9,6 +9,7 @@ namespace Talos.Renovate.Models
     public class SerializationConstants
     {
         public static JsonSerializerSettings SerializerSettings { get; }
+        public static JsonSerializerSettings TraceSerializerSettings { get; }
         public static JsonSerializerSettings SkopeoSerializerSettings { get; }
 
         public static IDeserializer DockerComposeDeserializer { get; }
@@ -16,7 +17,7 @@ namespace Talos.Renovate.Models
         static SerializationConstants()
         {
             SerializerSettings = new JsonSerializerSettings();
-            SerializerSettings.TypeNameHandling = TypeNameHandling.None;
+            SerializerSettings.TypeNameHandling = TypeNameHandling.All;
             SerializerSettings.MissingMemberHandling = MissingMemberHandling.Ignore;
             SerializerSettings.Formatting = Formatting.None;
             SerializerSettings.NullValueHandling = NullValueHandling.Ignore;
@@ -43,6 +44,16 @@ namespace Talos.Renovate.Models
                 .WithNamingConvention(HyphenatedNamingConvention.Instance)
                 .IgnoreUnmatchedProperties()
                 .Build();
+
+            TraceSerializerSettings = new JsonSerializerSettings();
+            TraceSerializerSettings.TypeNameHandling = TypeNameHandling.None;
+            TraceSerializerSettings.MissingMemberHandling = MissingMemberHandling.Ignore;
+            TraceSerializerSettings.Formatting = Formatting.None;
+            TraceSerializerSettings.NullValueHandling = NullValueHandling.Ignore;
+            TraceSerializerSettings.Converters.Add(new AbsoluteDateTimeJsonConverter());
+            TraceSerializerSettings.Converters.Add(new GenericStronglyTypedUnionJsonConverter());
+            TraceSerializerSettings.Converters.Add(new GenericOptionalJsonConverter());
+
 
         }
 

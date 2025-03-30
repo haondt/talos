@@ -1,192 +1,161 @@
 ﻿using Haondt.Core.Extensions;
 using Haondt.Core.Models;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Talos.Core.Extensions;
 using Talos.Renovate.Models;
 namespace Talos.Renovate.Services
 {
     public partial class ImageUpdaterService
     {
+        public static Dictionary<string, object?> FlattenObject(object obj)
+        {
+
+            var json = JsonConvert.SerializeObject(obj, SerializationConstants.TraceSerializerSettings);
+            var jObject = JObject.Parse(json);
+            return jObject.Descendants()
+                .OfType<JValue>()
+                .ToDictionary(
+                    jv => jv.Path.Replace("[", ".").Replace("]", ""),
+                    jv => jv.Value);
+        }
         private void LogTrace(ImageUpdateTrace trace)
         {
-
-            var scope = new Dictionary<string, object>
-            {
-                ["Resolution"] = trace.Resolution,
-            };
-            if (!string.IsNullOrEmpty(trace.DesiredImage))
-                scope["DesiredImage"] = trace.DesiredImage;
-            if (trace.DesiredImageCreatedOn.HasValue)
-                scope["DesiredImageCreatedOn"] = trace.DesiredImageCreatedOn.Value.UtcTime.ToString("s");
-            if (!string.IsNullOrEmpty(trace.CachedImage))
-                scope["CachedImage"] = trace.CachedImage;
-            if (trace.CachedImageCreatedOn.HasValue)
-                scope["CachedImageCreatedOn"] = trace.CachedImageCreatedOn.Value.UtcTime.ToString("s");
-
-            using (_logger.BeginScope(scope))
-
-                _logger.LogInformation("Processed image update {CurrentImage}", trace.CurrentImage);
+            using (_logger.BeginScope(FlattenObject(trace)))
+                _logger.LogInformation("Processed image update {CurrentImage}", trace.Identity);
         }
-        private async Task<Optional<ScheduledPush>> ProcessService(ImageUpdateIdentity id, TalosSettings configuration, string image)
+        private async Task<Optional<ScheduledPushWithIdentity>> ProcessServiceAsync(UpdateIdentity id, IUpdateLocation location)
         {
-            using var span = tracer.StartSpan($"{nameof(ProcessService)}");
-            span.SetAttribute(nameof(ImageUpdateIdentity), id.ToString());
-            span.SetAttribute("Image", image);
+            using var span = tracer.StartSpan($"{nameof(ProcessServiceAsync)}");
+            span.SetAttribute(nameof(UpdateIdentity), id.ToString());
             var cached = await updateDataRepository.TryGetImageUpdateDataAsync(id);
-            if (cached.HasValue && cached.Value.Image != image)
+
+            // if the location snapshot is different than expected, drop the cache
+            if (cached.IsSuccessful && !location.State.Snapshot.IsEquivalentTo(cached.Value.LastKnownSnapshot))
             {
-                var interactionId = cached.Value.Interaction?.InteractionId;
-                if (interactionId != null)
-                    await _notificationService.DeleteInteraction(interactionId);
+                var interactionId = cached.Value.Interaction.As(q => q.InteractionId);
+                if (interactionId.HasValue && interactionId.Value.HasValue)
+                    await _notificationService.DeleteInteraction(interactionId.Value.Value);
                 await updateDataRepository.ClearImageUpdateDataCacheAsync(id);
                 cached = new();
             }
 
-            var target = await SelectUpdateTarget(image, configuration.Bump);
-            if (!target.HasValue)
+
+            var push = await location.CreateScheduledPushAsync(this);
+            if (!push.HasValue)
             {
                 LogTrace(new ImageUpdateTrace()
                 {
                     Resolution = "Skipped due to image already being up to date",
-                    CurrentImage = image,
+                    Push = push,
+                    Identity = id,
+                    Cached = cached.AsOptional(),
                 });
                 return new();
             }
 
-            var strategy = target.Value.BumpSize switch
+            var idPush = new ScheduledPushWithIdentity(id, push.Value);
+
+            var strategy = push.Value.BumpSize switch
             {
-                BumpSize.Major => configuration.Strategy.Major,
-                BumpSize.Minor => configuration.Strategy.Minor,
-                BumpSize.Patch => configuration.Strategy.Patch,
-                BumpSize.Digest => configuration.Strategy.Digest,
-                _ => throw new ArgumentException($"Unknown {nameof(BumpStrategy)} {target.Value.BumpSize}")
+                BumpSize.Major => location.State.Configuration.Strategy.Major,
+                BumpSize.Minor => location.State.Configuration.Strategy.Minor,
+                BumpSize.Patch => location.State.Configuration.Strategy.Patch,
+                BumpSize.Digest => location.State.Configuration.Strategy.Digest,
+                _ => throw new ArgumentException($"Unknown {nameof(BumpStrategy)} {push.Value.BumpSize}")
             };
 
 
             switch (strategy)
             {
                 case BumpStrategy.Push:
-                    {
-                        return new ScheduledPush
-                        {
-                            Update = target.Value,
-                            Target = id,
-                        };
-                    }
+                    return new(new(id, push.Value));
                 case BumpStrategy.Prompt:
                     {
-                        if (cached.HasValue)
+                        if (cached.IsSuccessful)
                         {
-                            if (cached.Value.Interaction != null)
+                            if (cached.Value.Interaction.HasValue)
                             {
-
-                                if (target.Value.NewImageCreatedOn <= cached.Value.Interaction.PendingImageCreatedOn)
+                                if (!push.Value.IsNewerThan(cached.Value.Interaction.Value.PendingPush))
                                 {
+
                                     LogTrace(new ImageUpdateTrace
                                     {
                                         Resolution = "Skipped due to newer pending version",
-                                        DesiredImage = target.Value.NewImage.ToString(),
-                                        DesiredImageCreatedOn = target.Value.NewImageCreatedOn,
-                                        CurrentImage = image,
-                                        CachedImage = cached.Value.Interaction.PendingImage,
-                                        CachedImageCreatedOn = cached.Value.Interaction.PendingImageCreatedOn,
+                                        Push = push,
+                                        Identity = id,
+                                        Cached = cached.AsOptional(),
                                     });
 
                                     return new();
                                 }
 
-                                if (cached.Value.Interaction.InteractionId != null)
+
+                                if (cached.Value.Interaction.Value.InteractionId.HasValue)
                                 {
-                                    await _notificationService.DeleteInteraction(cached.Value.Interaction.InteractionId);
-                                    cached.Value.Interaction.InteractionId = null;
+                                    await _notificationService.DeleteInteraction(cached.Value.Interaction.Value.InteractionId.Value!);
+                                    cached.Value.Interaction.Value.InteractionId = new();
                                 }
                             }
                         }
-                        var interactionId = await _notificationService.CreateInteractionAsync(id, target.Value);
+                        var interactionId = await _notificationService.CreateInteractionAsync(idPush);
                         var updateData = new ImageUpdateData
                         {
-                            Image = image,
-                            Interaction = new()
+                            LastKnownSnapshot = location.State.Snapshot,
+                            Interaction = new(new()
                             {
-                                PendingImage = target.Value.NewImage.ToString(),
-                                PendingImageCreatedOn = target.Value.NewImageCreatedOn,
+                                PendingPush = push.Value,
                                 InteractionId = interactionId,
-                            }
+                            })
                         };
 
                         await updateDataRepository.SetImageUpdateDataAsync(id, updateData);
                         LogTrace(new ImageUpdateTrace
                         {
                             Resolution = "Created or replace interaction for pending image",
-                            DesiredImage = target.Value.NewImage.ToString(),
-                            DesiredImageCreatedOn = target.Value.NewImageCreatedOn,
-                            CurrentImage = image,
-                            CachedImage = updateData.Interaction.PendingImage,
-                            CachedImageCreatedOn = updateData.Interaction.PendingImageCreatedOn,
+                            Push = push,
+                            Identity = id,
+                            Cached = cached.AsOptional(),
                         });
 
                         return new();
                     }
                 case BumpStrategy.Notify:
                     {
-                        if (cached.HasValue)
+                        if (cached.IsSuccessful)
                         {
-                            if (cached.Value.LastNotified?.CreatedOn >= target.Value.NewImageCreatedOn)
+                            if (cached.Value.LastNotified.HasValue && !push.Value.IsNewerThan(cached.Value.LastNotified.Value))
                             {
                                 LogTrace(new ImageUpdateTrace
                                 {
                                     Resolution = "Skipping notification due to having already notified of newer version",
-                                    DesiredImage = target.Value.NewImage.ToString(),
-                                    DesiredImageCreatedOn = target.Value.NewImageCreatedOn,
-                                    CurrentImage = image,
-                                    CachedImage = cached.Value.LastNotified.Image,
-                                    CachedImageCreatedOn = cached.Value.LastNotified.CreatedOn
+                                    Push = push,
+                                    Identity = id,
+                                    Cached = cached.AsOptional(),
                                 });
                                 return new();
                             }
-                        }
-                        if (cached.HasValue)
-                        {
-                            cached.Value.LastNotified = new()
-                            {
-                                CreatedOn = target.Value.NewImageCreatedOn,
-                                Image = target.Value.NewImage.ToString()
-                            };
-                            if (cached.Value.LastNotified?.CreatedOn >= target.Value.NewImageCreatedOn)
-                            {
-                                LogTrace(new ImageUpdateTrace
-                                {
-                                    Resolution = "Skipping notification due to having already notified of newer version",
-                                    DesiredImage = target.Value.NewImage.ToString(),
-                                    DesiredImageCreatedOn = target.Value.NewImageCreatedOn,
-                                    CurrentImage = image,
-                                    CachedImage = cached.Value.LastNotified.Image,
-                                    CachedImageCreatedOn = cached.Value.LastNotified.CreatedOn
-                                });
-                                return new();
-                            }
+
+                            cached.Value.LastNotified = push;
                         }
                         else
                         {
-                            cached = new ImageUpdateData()
+                            cached = new(new()
                             {
-                                Image = image,
-                                LastNotified = new()
-                                {
-                                    CreatedOn = target.Value.NewImageCreatedOn,
-                                    Image = target.Value.NewImage.ToString()
-                                }
-                            };
+                                LastKnownSnapshot = location.State.Snapshot,
+                                LastNotified = push
+                            });
                         }
 
-                        await _notificationService.Notify(id, target.Value);
+                        await _notificationService.Notify(idPush);
                         await updateDataRepository.SetImageUpdateDataAsync(id, cached.Value!);
                         LogTrace(new ImageUpdateTrace
                         {
                             Resolution = "Notified about available update",
-                            DesiredImage = target.Value.NewImage.ToString(),
-                            DesiredImageCreatedOn = target.Value.NewImageCreatedOn,
-                            CurrentImage = image,
+                            Push = push,
+                            Identity = id,
+                            Cached = cached.AsOptional(),
                         });
                         return new();
                     }
@@ -194,7 +163,9 @@ namespace Talos.Renovate.Services
                     LogTrace(new ImageUpdateTrace
                     {
                         Resolution = $"Skipped due to {nameof(BumpStrategy)}.{BumpStrategy.Skip} strategy configuration",
-                        CurrentImage = image,
+                        Push = push,
+                        Identity = id,
+                        Cached = cached.AsOptional(),
                     });
                     return new();
                 default:
@@ -202,17 +173,25 @@ namespace Talos.Renovate.Services
             }
         }
 
-
-        public async Task<Optional<ImageUpdate>> SelectUpdateTarget(string image, BumpSize maxBumpSize, bool insertDefaultDomain = true)
+        /// <summary>
+        /// Get the most recent digest for the <paramref name="image"/>, with its tag replaced by <paramref name="tag"/>.
+        /// </summary>
+        /// <param name="image"></param>
+        /// <param name="tag"></param>
+        /// <returns></returns>
+        public async Task<(string Digest, AbsoluteDateTime Created)> GetDigestAsync(ParsedImage image, ParsedTag tag)
         {
-            var parsedActiveImage = _imageParser.Parse(image, insertDefaultDomain);
+            var inspect = await _skopeoService.Inspect($"{image.Untagged}:{tag}");
+            return (inspect.Digest, AbsoluteDateTime.Create(inspect.Created));
+        }
+
+        public async Task<List<ParsedTag>> GetSortedCandidateTagsAsync(ParsedImage parsedActiveImage, BumpSize maxBumpSize, bool insertDefaultDomain = true)
+        {
             // use untagged version for more cache hits
             var tags = await _skopeoService.ListTags(parsedActiveImage.Untagged);
             var parsedTags = tags.Select(_imageParser.TryParseTag)
                 .Where(q => q.HasValue)
                 .Select(q => q.Value!);
-
-            (ParsedImage Image, AbsoluteDateTime ImageCreatedOn, BumpSize Bump) desiredUpdate;
 
             if (!parsedActiveImage.TagAndDigest.HasValue)
             {
@@ -226,16 +205,10 @@ namespace Talos.Renovate.Services
                     .ToList();
 
                 if (validTags.Count == 0)
-                    return new();
+                    return [];
 
                 var desiredTag = validTags[0];
-                var desiredInspect = await _skopeoService.Inspect($"{parsedActiveImage.Untagged}:{desiredTag}");
-                var desiredDigest = desiredInspect.Digest;
-
-                desiredUpdate = (parsedActiveImage with
-                {
-                    TagAndDigest = new ParsedTagAndDigest(Tag: desiredTag, Digest: desiredDigest)
-                }, AbsoluteDateTime.Create(desiredInspect.Created), BumpSize.Digest);
+                return [desiredTag];
             }
             else if (parsedActiveImage.TagAndDigest.Value.Tag.Version.Is<string>(out var release))
             {
@@ -252,20 +225,10 @@ namespace Talos.Renovate.Services
                 var validTagsList = validTags.ToList();
 
                 if (validTagsList.Count == 0)
-                    return new();
+                    return [];
 
                 var validTag = validTagsList[0];
-                var validTagInspect = await _skopeoService.Inspect($"{parsedActiveImage.Untagged}:{validTag}");
-                var desiredDigest = validTagInspect.Digest;
-
-                if (parsedActiveImage.TagAndDigest.Value.Digest.HasValue)
-                    if (parsedActiveImage.TagAndDigest.Value.Digest.Value == desiredDigest)
-                        return new();
-
-                desiredUpdate = (parsedActiveImage with
-                {
-                    TagAndDigest = new ParsedTagAndDigest(validTag, desiredDigest)
-                }, AbsoluteDateTime.Create(validTagInspect.Created), BumpSize.Digest);
+                return [validTag];
             }
             else
             {
@@ -320,59 +283,107 @@ namespace Talos.Renovate.Services
                 }
 
                 if (validTags.Count == 0)
-                    return new();
+                    return [];
 
-                var highestValidVersion = validTags.OrderByDescending(q => q.SemanticVersion.Major)
+
+
+                var sorted = validTags.OrderByDescending(q => q.SemanticVersion.Major)
                     .ThenByDescending(q => q.SemanticVersion.Minor.Or(-1))
-                    .ThenByDescending(q => q.SemanticVersion.Patch.Or(-1))
-                    .First();
+                    .ThenByDescending(q => q.SemanticVersion.Patch.Or(-1));
 
-                var highestValidTag = new ParsedTag(Version: highestValidVersion.SemanticVersion, Variant: parsedActiveImage.TagAndDigest.Value.Tag.Variant);
-                var highestValidTagInspect = await _skopeoService.Inspect($"{parsedActiveImage.Untagged}:{highestValidTag}");
-                var highestValidTagDigest = highestValidTagInspect.Digest;
-
-                if (parsedActiveImage.TagAndDigest.Value.Digest.HasValue)
-                    if (parsedActiveImage.TagAndDigest.Value.Digest.Value == highestValidTagDigest)
-                        return new();
-
-                desiredUpdate = (parsedActiveImage with
-                {
-                    TagAndDigest = new ParsedTagAndDigest(Tag: highestValidTag, Digest: highestValidTagDigest)
-                }, AbsoluteDateTime.Create(highestValidTagInspect.Created), highestValidVersion.BumpSize);
+                return sorted.Select(q => new ParsedTag(Version: q.SemanticVersion, Variant: parsedActiveImage.TagAndDigest.Value.Tag.Variant)).ToList();
             }
-
-            return new(new(parsedActiveImage, desiredUpdate.Image, desiredUpdate.ImageCreatedOn, desiredUpdate.Bump));
         }
 
-        private async Task CompletePushAsync(ScheduledPush push)
+        public Optional<BumpSize> IsUpgrade(Optional<ParsedTagAndDigest> from, ParsedTag toTag, string toDigest)
+        {
+            if (!from.HasValue)
+                // for missing tags, we will add the latest tag and a digest
+                // -> latest@sha256:123
+                return BumpSize.Digest;
+            else if (from.Value.Tag.Version.Is<string>(out var release))
+            {
+                // with releases, we will only add the digest if it dne, or update it if there is a newer one
+                // latest -> latest@sha256:123
+                // latest@sha256:123 -> latest@sha256:abc
+                // we must also match the variant
+                // latest-alpine -> latest-alpine@sha256:abc
+                if (!from.Value.Digest.HasValue)
+                    return BumpSize.Digest;
+                if (from.Value.Digest.Value != toDigest)
+                    return BumpSize.Digest;
+                return new();
+            }
+            else
+            {
+                // with semver, we will find all the versions that keep the same precision
+                // (e.g. we wont do v1.2 -> v2 or v1.2 -> v2.0.0, but we will do v1.2 -> v2.0)
+                // then filter them by the configured bump level
+                // we must also match the variant
+                // v1.2.3-alpine@sha256:abc -> v1.3.1-alpine@sha256:abc
+                var size = SemanticVersion.Compare(from.Value.Tag.Version.Cast<SemanticVersion>(), toTag.Version.Cast<SemanticVersion>());
+                BumpSize bumpSize;
+
+                switch (size)
+                {
+                    case SemanticVersionSize.Major:
+                        bumpSize = BumpSize.Major;
+                        break;
+                    case SemanticVersionSize.Minor:
+                        bumpSize = BumpSize.Minor;
+                        break;
+                    case SemanticVersionSize.Patch:
+                        bumpSize = BumpSize.Patch;
+                        break;
+                    case SemanticVersionSize.Equal:
+                        bumpSize = BumpSize.Digest;
+                        break;
+                    case SemanticVersionSize.PrecisionMismatch:
+                    case SemanticVersionSize.Downgrade:
+                    default:
+                        return new();
+                }
+
+                if (!from.Value.Digest.HasValue)
+                    return bumpSize;
+                if (from.Value.Digest.Value != toDigest)
+                    return bumpSize;
+                return new();
+            }
+        }
+
+        private async Task CompletePushAsync(ScheduledPushWithIdentity push, IUpdateLocationSnapshot snapshot)
         {
             using var span = tracer.StartSpan(nameof(CompletePushAsync));
-            span.SetAttribute(nameof(ImageUpdateIdentity), push.Target.ToString());
-            var cached = (await updateDataRepository.TryGetImageUpdateDataAsync(push.Target))
-                .As(c =>
-                {
-                    c.Image = push.Update.NewImage.ToString();
-                    return c;
-                }).Or(new ImageUpdateData()
-                {
-                    Image = push.Update.NewImage.ToString()
-                });
-
-            if (cached.LastNotified != null)
-                if (cached.LastNotified.CreatedOn <= push.Update.NewImageCreatedOn)
-                    cached.LastNotified = null;
-
-            if (cached.Interaction != null)
+            span.SetAttribute(nameof(UpdateIdentity), push.Identity.ToString());
+            var cachedResult = await updateDataRepository.TryGetImageUpdateDataAsync(push.Identity);
+            ImageUpdateData cached;
+            if (cachedResult.IsSuccessful)
             {
-                if (cached.Interaction.PendingImageCreatedOn <= push.Update.NewImageCreatedOn)
+                cachedResult.Value.LastKnownSnapshot = snapshot;
+                cached = cachedResult.Value;
+            }
+            else
+                cached = new()
                 {
-                    if (cached.Interaction.InteractionId != null)
-                        await _notificationService.DeleteInteraction(cached.Interaction.InteractionId);
-                    cached.Interaction = null;
+                    LastKnownSnapshot = snapshot
+                };
+
+            if (cached.LastNotified.HasValue)
+                if (!cached.LastNotified.Value.IsNewerThan(push.Push))
+                    cached.LastNotified = new();
+
+            if (cached.Interaction.HasValue)
+            {
+                if (!cached.Interaction.Value.PendingPush.IsNewerThan(push.Push))
+                {
+                    if (cached.Interaction.Value.InteractionId.HasValue)
+                        await _notificationService.DeleteInteraction(cached.Interaction.Value.InteractionId.Value);
+                    cached.Interaction = new();
                 }
             }
 
-            await updateDataRepository.SetImageUpdateDataAsync(push.Target, cached);
+            await updateDataRepository.SetImageUpdateDataAsync(push.Identity, cached);
         }
     }
 }

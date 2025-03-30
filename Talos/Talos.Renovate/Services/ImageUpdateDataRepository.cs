@@ -11,12 +11,12 @@ namespace Talos.Renovate.Services
     public class ImageUpdateDataRepository(IRedisProvider redisProvider, ILogger<ImageUpdateDataRepository> _logger) : IImageUpdateDataRepository
     {
         private readonly IDatabase _redis = redisProvider.GetDefaultDatabase();
-        public Task<bool> ClearImageUpdateDataCacheAsync(ImageUpdateIdentity id)
+        public Task<bool> ClearImageUpdateDataCacheAsync(UpdateIdentity id)
         {
             return _redis.KeyDeleteAsync(RedisNamespacer.UpdateTarget(id.ToString()));
         }
 
-        public async Task<Optional<ImageUpdateData>> TryGetImageUpdateDataAsync(ImageUpdateIdentity id)
+        public async Task<Result<ImageUpdateData>> TryGetImageUpdateDataAsync(UpdateIdentity id)
         {
             var cachedResponse = await _redis.StringGetAsync(RedisNamespacer.UpdateTarget(id.ToString()));
             if (cachedResponse.IsNull)
@@ -31,7 +31,7 @@ namespace Talos.Renovate.Services
             return deserialized;
         }
 
-        public Task<bool> SetImageUpdateDataAsync(ImageUpdateIdentity id, ImageUpdateData data)
+        public Task<bool> SetImageUpdateDataAsync(UpdateIdentity id, ImageUpdateData data)
         {
             var serialized = JsonConvert.SerializeObject(data, SerializationConstants.SerializerSettings)
                 ?? throw new JsonSerializationException($"Failed to serialize image update data for image {id}");
