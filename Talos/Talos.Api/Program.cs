@@ -110,8 +110,9 @@ app.MapPost("/webhooks/{integration}", async (HttpContext context, string integr
 
         return Results.Ok();
     }
-    catch (JsonException)
+    catch (JsonException ex)
     {
+        app.Logger.LogError(ex, "Ran into serialization error during gitlab webhook: {Error}", ex.Message);
         return Results.BadRequest("Malformed JSON.");
     }
 });
