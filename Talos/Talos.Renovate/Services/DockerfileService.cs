@@ -49,7 +49,7 @@ namespace Talos.Renovate.Services
         private static Result<(string Head, string Image, string Tail)> TryExtractFromImage(string line)
         {
             var pattern = @"^(?<head>(?i)FROM(?-i)\s+)(?<image>\S+)(?<tail>(?:\s+(?i)AS(?-i)\s+\S+)?\s*)$";
-            var match = Regex.Match(pattern, line);
+            var match = Regex.Match(line, pattern);
             if (!match.Success)
                 return Result<(string, string, string)>.Failure;
             return (match.Groups["head"].Value, match.Groups["image"].Value, match.Groups["tail"].Value);
@@ -59,7 +59,7 @@ namespace Talos.Renovate.Services
         {
             if (shortFormValue != null)
             {
-                if (talosLines.Count != 1)
+                if (talosLines.Count > 0)
                     return new($"Unable to parse short form {shortFormValue} alongside other talos lines");
                 return TalosSettings.ParseShortForm(shortFormValue);
             }
@@ -168,7 +168,6 @@ namespace Talos.Renovate.Services
             foreach (var (absoluteFilePath, relativeFilePath) in GetDockerfileTargets(clonedRepositoryDirectory, repository))
             {
                 var content = File.ReadAllText(absoluteFilePath);
-                var fileHash = HashUtils.ComputeSha256Hash(content);
                 var lines = content.Split(Environment.NewLine);
 
                 var fromLines = new Dictionary<int, string>();
@@ -186,18 +185,17 @@ namespace Talos.Renovate.Services
                 {
                     var coordinates = new DockerfileUpdateLocationCoordinates { Line = line, RelativeFilePath = relativeFilePath };
 
-                    var talosLineIndex = line + 1;
                     var talosLines = new List<string>();
-                    string? shortFormValue = null;
-                    while (talosLineIndex < lines.Length)
+                    var shortFormValues = new List<string>();
+                    for (int talosLineIndex = line + 1; talosLineIndex < lines.Length; talosLineIndex++)
                     {
                         var talosLine = lines[talosLineIndex];
 
-                        if (shortFormValue == null)
+                        var shortFormMatch = Regex.Match(talosLine, talosShortFormPattern);
+                        if (shortFormMatch.Success)
                         {
-                            var shortFormMatch = Regex.Match(talosLine, talosShortFormPattern);
-                            if (shortFormMatch.Success)
-                                shortFormValue = shortFormMatch.Groups["value"].Value;
+                            shortFormValues.Add(shortFormMatch.Groups["value"].Value);
+                            continue;
                         }
 
                         var talosMatch = Regex.Match(talosLine, talosLinePattern);
@@ -206,14 +204,19 @@ namespace Talos.Renovate.Services
                         talosLines.Add(talosLine);
                     }
 
-                    if (talosLines.Count == 0)
+                    if (talosLines.Count == 0 && shortFormValues.Count == 0)
                     {
                         images.Add(new($"{coordinates}: missing talos extension"));
                         continue;
                     }
 
+                    if (shortFormValues.Count > 1)
+                    {
+                        images.Add(new($"{coordinates}: found multiple short form values"));
+                        continue;
+                    }
 
-                    var talosSettings = ParseTalosLines(talosLines, shortFormValue);
+                    var talosSettings = ParseTalosLines(talosLines, shortFormValues.SingleOrDefault());
                     if (!talosSettings.IsSuccessful)
                     {
                         images.Add(new($"{coordinates}:  {talosSettings.Reason}"));
@@ -227,13 +230,14 @@ namespace Talos.Renovate.Services
                         continue;
                     }
 
+                    var lineHash = HashUtils.ComputeSha256Hash(lines[line]);
                     var state = new DockerfileUpdateLocationState
                     {
                         Configuration = talosSettings.Value,
                         Snapshot = new()
                         {
                             CurrentImage = parsedImage.Value,
-                            LineHash = fileHash
+                            LineHash = lineHash
                         }
                     };
 

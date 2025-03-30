@@ -78,8 +78,8 @@ namespace Talos.Renovate.Models
             if (Coordinates.Line >= fileLines.Length)
                 return new($"File is below expected line length {Coordinates.Line + 1}, found {fileLines.Length} lines.");
             var lineHash = HashUtils.ComputeSha256Hash(fileLines[Coordinates.Line]);
-            if (lineHash != Snapshot.LineHash)
-                return new($"Has for line {Coordinates.Line + 1} was different than expected.");
+            if (!lineHash.SequenceEqual(Snapshot.LineHash))
+                return new($"Hash for line {Coordinates.Line} was different than expected.");
 
             var setResult = DockerfileService.SetFromImage(fileContent, Coordinates.Line, Update.NewImage.ToString());
             if (!setResult.IsSuccessful)
