@@ -101,12 +101,12 @@ namespace Talos.Renovate.Services
         {
             var matcher = new Matcher();
             matcher.AddExclude("**/.git/**");
-            if (repository.Glob.Dockerfile?.IncludeGlobs != null)
-                matcher.AddIncludePatterns(repository.Glob.Dockerfile.IncludeGlobs);
+            if (repository.Glob.DockerCompose?.IncludeGlobs != null)
+                matcher.AddIncludePatterns(repository.Glob.DockerCompose.IncludeGlobs);
             else
                 matcher.AddInclude("**/docker-compose.yml");
-            if (repository.Glob.Dockerfile?.ExcludeGlobs != null)
-                matcher.AddExcludePatterns(repository.Glob.Dockerfile.ExcludeGlobs);
+            if (repository.Glob.DockerCompose?.ExcludeGlobs != null)
+                matcher.AddExcludePatterns(repository.Glob.DockerCompose.ExcludeGlobs);
 
             var result = matcher.Execute(
                 new DirectoryInfoWrapper(
