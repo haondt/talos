@@ -16,6 +16,7 @@
 **/charts
 **/docker-compose*
 **/Dockerfile*
+!**/Dockerfile*.cs
 !**/Dockerfile*.csproj
 **/node_modules
 **/npm-debug.log
