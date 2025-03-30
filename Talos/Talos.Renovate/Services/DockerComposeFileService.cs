@@ -133,11 +133,6 @@ namespace Talos.Renovate.Services
                 {
                     var coordinates = new DockerComposeUpdateLocationCoordinates { RelativeFilePath = relativeFilePath, ServiceKey = service.Key };
 
-                    if (string.IsNullOrEmpty(service.Value.Image))
-                    {
-                        images.Add(new($"{coordinates}: missing image tag"));
-                        continue;
-                    }
 
                     TalosSettings xTalos;
                     if (service.Value.XTalos != null)
@@ -160,6 +155,13 @@ namespace Talos.Renovate.Services
 
                     if (xTalos.Skip)
                         continue;
+
+                    if (string.IsNullOrEmpty(service.Value.Image))
+                    {
+                        images.Add(new($"{coordinates}: missing image tag"));
+                        continue;
+                    }
+
 
                     var parsedImage = imageParser.TryParse(service.Value.Image);
                     if (!parsedImage.HasValue)
