@@ -1,4 +1,6 @@
-﻿namespace Talos.Core.Models
+﻿using Haondt.Core.Models;
+
+namespace Talos.Core.Models
 {
     public static class RedisNamespacer
     {
@@ -10,7 +12,12 @@
             {
                 private static readonly string Segment = $"{Pushes.Segment}:timestamps";
                 public static string Domain(string domain) => $"{Segment}:domain:{domain}";
-                public static string Repo(string repo) => $"{Segment}:repo:{repo}";
+                public static string Repo(string repo, Optional<string> branch)
+                {
+                    if (branch.HasValue)
+                        return $"{Segment}:repo:{repo}/{branch.Value}";
+                    return $"{Segment}:repo:{repo}";
+                }
             }
 
             public static readonly string Queue = $"{Segment}:queue";

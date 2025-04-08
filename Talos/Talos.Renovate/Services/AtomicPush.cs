@@ -115,7 +115,7 @@ namespace Talos.Renovate.Services
         {
             var writers = new List<ISubatomicPushToFileWriter>();
             var maxBumpSize = BumpSize.Digest;
-            HashSet<ParsedTag> candidateTagSet = [];
+            HashSet<ParsedTag>? candidateTagSet = null;
             List<ParsedTag> childCandidateTags = [];
             foreach (var (snapshot, coordinates) in State.Snapshot.Children.Zip(Coordinates.Children))
             {
@@ -132,6 +132,8 @@ namespace Talos.Renovate.Services
                 if (candidateTagSet.Count == 0)
                     return new();
             }
+            if (candidateTagSet == null)
+                return new();
 
             var desiredTag = childCandidateTags.First(t => candidateTagSet.Contains(t));
             var digestSet = new HashSet<string>();
@@ -209,9 +211,9 @@ namespace Talos.Renovate.Services
     {
         public List<IUpdateLocationCoordinates> Children { get; set; } = [];
 
-        public UpdateIdentity GetIdentity(string repository)
+        public UpdateIdentity GetIdentity(string repository, Optional<string> branch)
         {
-            return UpdateIdentity.Atomic(repository, Children.Select(q => q.GetIdentity(repository)));
+            return UpdateIdentity.Atomic(repository, branch, Children.Select(q => q.GetIdentity(repository, branch)));
         }
 
         public override string ToString()

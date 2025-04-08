@@ -163,7 +163,7 @@ namespace Talos.Renovate.Services
                     }
 
 
-                    var parsedImage = imageParser.TryParse(service.Value.Image);
+                    var parsedImage = imageParser.TryParse(service.Value.Image, true);
                     if (!parsedImage.HasValue)
                     {
                         images.Add(new($"{coordinates}: couldn't parse image {service.Value.Image}"));

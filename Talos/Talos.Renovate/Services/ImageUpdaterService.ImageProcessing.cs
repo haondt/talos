@@ -185,7 +185,7 @@ namespace Talos.Renovate.Services
             return (inspect.Digest, AbsoluteDateTime.Create(inspect.Created));
         }
 
-        public async Task<List<ParsedTag>> GetSortedCandidateTagsAsync(ParsedImage parsedActiveImage, BumpSize maxBumpSize, bool insertDefaultDomain = true)
+        public async Task<List<ParsedTag>> GetSortedCandidateTagsAsync(ParsedImage parsedActiveImage, BumpSize maxBumpSize)
         {
             // use untagged version for more cache hits
             var tags = await _skopeoService.ListTags(parsedActiveImage.Untagged);

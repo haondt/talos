@@ -17,15 +17,15 @@ namespace Talos.Renovate.Models
 
             builder.Validate(o =>
             {
-                var visited = new HashSet<string>();
+                var visited = new HashSet<(string, string?)>();
                 foreach (var repository in o.Repositories)
                 {
-                    if (!visited.Add(repository.NormalizedUrl))
+                    if (!visited.Add((repository.NormalizedUrl, repository.Branch)))
                         return false;
                 }
 
                 return true;
-            }, "Repositories must be unique by Url.");
+            }, "Repositories must be unique by url and branch.");
 
             builder.Validate(o => o.Repositories.All(r => o.Hosts.ContainsKey(r.Host)), "Repository cannot refer to an undefined host.");
 

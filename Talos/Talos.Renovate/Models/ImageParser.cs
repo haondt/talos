@@ -27,7 +27,7 @@ namespace Talos.Renovate.Models
             _tagRegex = new($"^{tagPattern}$");
         }
 
-        public Optional<ParsedImage> TryParse(string image, bool insertDefaultDomain = false)
+        public Optional<ParsedImage> TryParse(string image, bool insertDefaultDomain)
         {
             var match = _imageRegex.Match(image);
 
@@ -113,7 +113,7 @@ namespace Talos.Renovate.Models
 
 
 
-        public ParsedImage Parse(string image, bool insertDefaultDomain = false)
+        public ParsedImage Parse(string image, bool insertDefaultDomain)
         {
             var parsed = TryParse(image, insertDefaultDomain);
             if (parsed.HasValue)

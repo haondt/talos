@@ -312,7 +312,7 @@ namespace Talos.Renovate.Tests
             var sut = GetSut(new FakeSkopeoService(tagsByName, digestsByNameAndTag));
             var currentFullImage = currentTagAndDigest.As(q => $"{name}:{q}").Or(name);
             var becauseString = $"the image was {currentFullImage} with maxBump {maxBumpSize}";
-            var parsedImage = _imageParser.Parse(currentFullImage);
+            var parsedImage = _imageParser.Parse(currentFullImage, false);
 
             // this will only filter out tags based on tag itself, it doesn't look at digests at all
             var result = await sut.GetSortedCandidateTagsAsync(parsedImage, maxBumpSize);

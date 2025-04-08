@@ -34,7 +34,7 @@ namespace Talos.Renovate.Models
 
     public interface IUpdateLocationCoordinates
     {
-        public UpdateIdentity GetIdentity(string repository);
+        public UpdateIdentity GetIdentity(string repository, Optional<string> branch);
     }
 
     public interface IUpdateLocationState

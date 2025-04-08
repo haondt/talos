@@ -109,9 +109,10 @@ namespace Talos.Renovate.Services
                         syncGroup = syncedTargets[result.Value.State.Configuration.Sync.Group] = [];
 
                     syncGroup.Add(subatomicUpdateLocation);
+                    continue;
                 }
 
-                targets.Add((result.Value.Coordinates.GetIdentity(repositoryConfiguration.NormalizedUrl), result.Value));
+                targets.Add((result.Value.Coordinates.GetIdentity(repositoryConfiguration.NormalizedUrl, repositoryConfiguration.Branch.AsOptional()), result.Value));
             }
 
             foreach (var (group, groupTargets) in syncedTargets)
@@ -120,7 +121,7 @@ namespace Talos.Renovate.Services
 
                 if (parents.Count > 1)
                 {
-                    _logger.LogWarning("Failed to create synchronized update group {Group} due to multiple parents: {Parents}", group, parents.Select(q => q.Coordinates.GetIdentity(repositoryConfiguration.NormalizedUrl)).ToList());
+                    _logger.LogWarning("Failed to create synchronized update group {Group} due to multiple parents: {Parents}", group, parents.Select(q => q.Coordinates.GetIdentity(repositoryConfiguration.NormalizedUrl, repositoryConfiguration.Branch.AsOptional())).ToList());
                     continue;
                 }
 
@@ -132,7 +133,7 @@ namespace Talos.Renovate.Services
 
                 var parent = parents[0];
 
-                var id = UpdateIdentity.Atomic(repositoryConfiguration.NormalizedUrl, groupTargets.Select(q => q.Coordinates.GetIdentity(repositoryConfiguration.NormalizedUrl)));
+                var id = UpdateIdentity.Atomic(repositoryConfiguration.NormalizedUrl, repositoryConfiguration.Branch.AsOptional(), groupTargets.Select(q => q.Coordinates.GetIdentity(repositoryConfiguration.NormalizedUrl, repositoryConfiguration.Branch.AsOptional())));
                 var location = AtomicUpdateLocation.Create(parent.State.Configuration, groupTargets);
                 targets.Add((id, location));
             }
@@ -178,9 +179,9 @@ namespace Talos.Renovate.Services
         }
 
 
-        public (HostConfiguration Host, RepositoryConfiguration Repository) GetRepositoryConfiguration(string remoteUrl)
+        public (HostConfiguration Host, RepositoryConfiguration Repository) GetRepositoryConfiguration(string remoteUrl, Optional<string> branch)
         {
-            var repositoryConfiguration = _updateSettings.Repositories.Single(r => r.NormalizedUrl == remoteUrl);
+            var repositoryConfiguration = _updateSettings.Repositories.Single(r => r.NormalizedUrl == remoteUrl && r.Branch.AsOptional().IsEquivalentTo(branch));
             var hostConfiguration = updateOptions.Value.Hosts[repositoryConfiguration.Host];
             return (hostConfiguration, repositoryConfiguration);
         }

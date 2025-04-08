@@ -223,7 +223,7 @@ namespace Talos.Renovate.Services
                         continue;
                     }
 
-                    var parsedImage = imageParser.TryParse(image);
+                    var parsedImage = imageParser.TryParse(image, true);
                     if (!parsedImage.HasValue)
                     {
                         images.Add(new($"{coordinates}: couldn't parse image {image}"));

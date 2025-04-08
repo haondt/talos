@@ -111,9 +111,9 @@ namespace Talos.Renovate.Models
         public required string RelativeFilePath { get; init; }
         public required int Line { get; init; }
 
-        public UpdateIdentity GetIdentity(string repository)
+        public UpdateIdentity GetIdentity(string repository, Optional<string> branch)
         {
-            return UpdateIdentity.Dockerfile(repository, RelativeFilePath, Line);
+            return UpdateIdentity.Dockerfile(repository, branch, RelativeFilePath, Line);
         }
         public override string ToString()
         {

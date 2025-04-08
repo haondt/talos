@@ -30,7 +30,7 @@ namespace Talos.Renovate.Services
                     if (!Settings.Domains.TryGetValue(domain, out var throttlingConfiguration))
                     {
                         AvailablePushCapacityByDomain[domain] = new();
-                        return true;
+                        continue;
                     }
                     var windowStart = Now with { UnixTimeSeconds = Now.UnixTimeSeconds - (int)throttlingConfiguration.Per };
                     var pushesInTheLast = await queueDb.SortedSetLengthAsync(RedisNamespacer.Pushes.Timestamps.Domain(domain), windowStart.UnixTimeSeconds, AbsoluteDateTime.MaxValue.UnixTimeSeconds);
@@ -38,7 +38,7 @@ namespace Talos.Renovate.Services
                 }
 
                 if (!capacity.HasValue)
-                    return true;
+                    continue;
 
                 if (capacity.Value < count)
                     return false;
@@ -111,7 +111,7 @@ namespace Talos.Renovate.Services
                     var pushId = Guid.NewGuid().ToString();
                     foreach (var (domain, _) in push.Push.UpdatesPerDomain)
                         tasks.Add(batch.SortedSetAddAsync(RedisNamespacer.Pushes.Timestamps.Domain(domain), pushId, now.UnixTimeSeconds));
-                    tasks.Add(batch.SortedSetAddAsync(RedisNamespacer.Pushes.Timestamps.Repo(push.Identity.GitRemoteUrl), pushId, now.UnixTimeSeconds));
+                    tasks.Add(batch.SortedSetAddAsync(RedisNamespacer.Pushes.Timestamps.Repo(push.Identity.GitRemoteUrl, push.Identity.GitBranch), pushId, now.UnixTimeSeconds));
                 }
                 batch.Execute();
                 await Task.WhenAll(tasks);
@@ -189,13 +189,13 @@ namespace Talos.Renovate.Services
                 using var _ = _logger.BeginScope(new Dictionary<string, object> { { "TraceId", span.Value!.TraceId } });
 
                 var pushesByRemote = allowedPushesByDomain
-                    .GroupBy(p => p.Identity.GitRemoteUrl)
+                    .GroupBy(p => (p.Identity.GitRemoteUrl, p.Identity.GitBranch))
                     .ToDictionary(p => p.Key, p => p.ToList());
                 var allowedPushesByRemote = new List<(HostConfiguration host, RepositoryConfiguration repository, List<ScheduledPushWithIdentity>)>();
 
                 foreach (var (remote, remotePushes) in pushesByRemote)
                 {
-                    var (host, repository) = imageUpdaterService.GetRepositoryConfiguration(remote);
+                    var (host, repository) = imageUpdaterService.GetRepositoryConfiguration(remote.GitRemoteUrl, remote.GitBranch);
                     if (repository.CooldownSeconds <= 0)
                     {
                         allowedPushesByRemote.Add((host, repository, remotePushes));
@@ -203,7 +203,7 @@ namespace Talos.Renovate.Services
                     }
 
                     var windowStart = now with { UnixTimeSeconds = now.UnixTimeSeconds - (int)repository.CooldownSeconds };
-                    var pushesInTheLast = await _queueDb.SortedSetLengthAsync(RedisNamespacer.Pushes.Timestamps.Repo(remote), windowStart.UnixTimeSeconds, AbsoluteDateTime.MaxValue.UnixTimeSeconds);
+                    var pushesInTheLast = await _queueDb.SortedSetLengthAsync(RedisNamespacer.Pushes.Timestamps.Repo(remote.GitRemoteUrl, remote.GitBranch), windowStart.UnixTimeSeconds, AbsoluteDateTime.MaxValue.UnixTimeSeconds);
                     if (pushesInTheLast > 0)
                         continue;
 
@@ -219,7 +219,7 @@ namespace Talos.Renovate.Services
                     {
                         var (success, deadletters) = await imageUpdaterService.PushUpdates(host, repository, allowedPushes, cancellationToken);
                         await CompletePushesAsync(success, deadletters, now);
-                        _logger.LogInformation("Processed {Count} pushes and {DeadLetters} deadletters for remote {Remote}", success.Count, deadletters.Count, repository.NormalizedUrl);
+                        _logger.LogInformation("Processed {Count} pushes and {DeadLetters} deadletters for remote {Remote} [{Branch}]", success.Count, deadletters.Count, repository.NormalizedUrl, repository.Branch);
                     }
                     catch (Exception ex) when (ex is not TaskCanceledException)
                     {
