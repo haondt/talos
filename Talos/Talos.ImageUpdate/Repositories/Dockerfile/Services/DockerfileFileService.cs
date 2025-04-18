@@ -70,10 +70,10 @@ namespace Talos.ImageUpdate.Repositories.Dockerfile.Services
 
             const string talosParameterPattern = @"(?<key>[\w.]+)=(?<value>[\w.]+)";
             var talosSettings = new TalosSettings();
+            var syncSettings = new Dictionary<string, string>();
             foreach (var talosLine in talosLines)
             {
                 var parameterMatches = Regex.Matches(talosLine, talosParameterPattern);
-                var syncSettings = new Dictionary<string, string>();
                 foreach (Match parameterMatch in parameterMatches)
                 {
                     var key = parameterMatch.Groups["key"].Value.Trim().ToLower();
@@ -119,139 +119,147 @@ namespace Talos.ImageUpdate.Repositories.Dockerfile.Services
                             break;
                     }
                 }
+            }
 
-                if (syncSettings.Count > 0)
+            if (syncSettings.Count > 0)
+            {
+                if (!syncSettings.TryGetValue("sync.role", out var roleString))
+                    return new($"Sync settings were provided, but did not include role.");
+                if (!Enum.TryParse<SyncRole>(roleString, out var role))
+                    return new($"Failed to parse sync.role {roleString} as {typeof(SyncRole)}.");
+                if (!syncSettings.TryGetValue("sync.group", out var group))
+                    return new($"Sync settings were provided, but did not include group.");
+                if (string.IsNullOrEmpty(group))
+                    return new("sync.group cannot be empty.");
+
+                if (!syncSettings.TryGetValue("sync.id", out var id))
+                    return new($"Sync settings were provided, but did not include id.");
+                if (string.IsNullOrEmpty(id))
+                    return new("sync.id cannot be empty.");
+
+                talosSettings.Sync = new()
                 {
-                    if (!syncSettings.TryGetValue("sync.role", out var roleString))
-                        return new($"Sync settings were provided, but did not include role.");
-                    if (!Enum.TryParse<SyncRole>(roleString, out var role))
-                        return new($"Failed to parse sync.role {roleString} as {typeof(SyncRole)}.");
-                    if (!syncSettings.TryGetValue("sync.group", out var group))
-                        return new($"Sync settings were provided, but did not include group.");
-                    if (string.IsNullOrEmpty(group))
-                        return new("sync.group cannot be empty.");
-
-                    if (!syncSettings.TryGetValue("sync.id", out var id))
-                        return new($"Sync settings were provided, but did not include id.");
-                    if (string.IsNullOrEmpty(id))
-                        return new("sync.id cannot be empty.");
-
-                    talosSettings.Sync = new()
-                    {
-                        Id = id,
-                        Group = group,
-                        Role = role
-                    };
+                    Id = id,
+                    Group = group,
+                    Role = role
+                };
 
 
-                    if (role == SyncRole.Parent)
-                    {
-                        if (syncSettings.TryGetValue("sync.digest", out var digestString))
-                            if (!bool.TryParse(digestString, out var digest))
-                                return new($"Unable to parse sync.digest {digestString} as bool");
-                            else
-                                talosSettings.Sync.Digest = digest;
+                if (role == SyncRole.Parent)
+                {
+                    if (syncSettings.TryGetValue("sync.digest", out var digestString))
+                        if (!bool.TryParse(digestString, out var digest))
+                            return new($"Unable to parse sync.digest {digestString} as bool");
+                        else
+                            talosSettings.Sync.Digest = digest;
 
-                        if (syncSettings.TryGetValue("sync.children", out var childIds))
-                            talosSettings.Sync.Children = childIds.Split(',')
-                                .Where(q => !string.IsNullOrEmpty(q))
-                                .ToList();
-                    }
+                    if (syncSettings.TryGetValue("sync.children", out var childIds))
+                        talosSettings.Sync.Children = childIds.Split(',')
+                            .Where(q => !string.IsNullOrEmpty(q))
+                            .ToList();
                 }
             }
 
             return new(talosSettings);
         }
-
-        public List<DetailedResult<IUpdateLocation, string>> ExtractLocations(RepositoryConfiguration repository, string clonedRepositoryDirectory)
+        public List<DetailedResult<IUpdateLocation, string>> ExtractLocations(string relativeFilePath, string content)
         {
             var images = new List<DetailedResult<IUpdateLocation, string>>();
             const string talosLinePattern = @"^#\s+(?i)!talos(?-i)(?:\s+(?:[\w.]+=[\w.]+))*\s*$";
             const string talosShortFormPattern = @"^#\s+(?i)!talos:\s+(?<value>\S+)\s*$";
 
+            var lines = content.Split(Environment.NewLine);
+
+            var fromLines = new Dictionary<int, string>();
+
+            // Look for FROM instruction
+            for (int i = 0; i < lines.Length; i++)
+            {
+                var matchResult = TryExtractFromImage(lines[i]);
+                if (!matchResult.IsSuccessful)
+                    continue;
+                fromLines[i] = matchResult.Value.Image;
+            }
+
+            foreach (var (line, image) in fromLines)
+            {
+                var coordinates = new DockerfileUpdateLocationCoordinates { Line = line, RelativeFilePath = relativeFilePath };
+
+                var talosLines = new List<string>();
+                var shortFormValues = new List<string>();
+                for (int talosLineIndex = line + 1; talosLineIndex < lines.Length; talosLineIndex++)
+                {
+                    var talosLine = lines[talosLineIndex];
+
+                    var shortFormMatch = Regex.Match(talosLine, talosShortFormPattern);
+                    if (shortFormMatch.Success)
+                    {
+                        shortFormValues.Add(shortFormMatch.Groups["value"].Value);
+                        continue;
+                    }
+
+                    var talosMatch = Regex.Match(talosLine, talosLinePattern);
+                    if (!talosMatch.Success)
+                        break;
+                    talosLines.Add(talosLine);
+                }
+
+                if (talosLines.Count == 0 && shortFormValues.Count == 0)
+                {
+                    images.Add(new($"{coordinates}: missing talos extension"));
+                    continue;
+                }
+
+                if (shortFormValues.Count > 1)
+                {
+                    images.Add(new($"{coordinates}: found multiple short form values"));
+                    continue;
+                }
+
+                var talosSettings = ParseTalosLines(talosLines, shortFormValues.SingleOrDefault());
+                if (!talosSettings.IsSuccessful)
+                {
+                    images.Add(new($"{coordinates}:  {talosSettings.Reason}"));
+                    continue;
+                }
+
+                var parsedImage = imageParser.TryParse(image, true);
+                if (!parsedImage.HasValue)
+                {
+                    images.Add(new($"{coordinates}: couldn't parse image {image}"));
+                    continue;
+                }
+
+                var lineHash = HashUtils.ComputeSha256Hash(lines[line]);
+                var state = new DockerfileUpdateLocationState
+                {
+                    Configuration = talosSettings.Value,
+                    Snapshot = new()
+                    {
+                        CurrentImage = parsedImage.Value,
+                        LineHash = lineHash
+                    }
+                };
+
+
+                images.Add(new(new DockerfileUpdateLocation()
+                {
+                    Coordinates = coordinates,
+                    State = state
+                }));
+            }
+
+            return images;
+
+        }
+
+        public List<DetailedResult<IUpdateLocation, string>> ExtractLocations(RepositoryConfiguration repository, string clonedRepositoryDirectory)
+        {
+            var images = new List<DetailedResult<IUpdateLocation, string>>();
             foreach (var (absoluteFilePath, relativeFilePath) in GetDockerfileTargets(clonedRepositoryDirectory, repository))
             {
                 var content = File.ReadAllText(absoluteFilePath);
-                var lines = content.Split(Environment.NewLine);
-
-                var fromLines = new Dictionary<int, string>();
-
-                // Look for FROM instruction
-                for (int i = 0; i < lines.Length; i++)
-                {
-                    var matchResult = TryExtractFromImage(lines[i]);
-                    if (!matchResult.IsSuccessful)
-                        continue;
-                    fromLines[i] = matchResult.Value.Image;
-                }
-
-                foreach (var (line, image) in fromLines)
-                {
-                    var coordinates = new DockerfileUpdateLocationCoordinates { Line = line, RelativeFilePath = relativeFilePath };
-
-                    var talosLines = new List<string>();
-                    var shortFormValues = new List<string>();
-                    for (int talosLineIndex = line + 1; talosLineIndex < lines.Length; talosLineIndex++)
-                    {
-                        var talosLine = lines[talosLineIndex];
-
-                        var shortFormMatch = Regex.Match(talosLine, talosShortFormPattern);
-                        if (shortFormMatch.Success)
-                        {
-                            shortFormValues.Add(shortFormMatch.Groups["value"].Value);
-                            continue;
-                        }
-
-                        var talosMatch = Regex.Match(talosLine, talosLinePattern);
-                        if (!talosMatch.Success)
-                            break;
-                        talosLines.Add(talosLine);
-                    }
-
-                    if (talosLines.Count == 0 && shortFormValues.Count == 0)
-                    {
-                        images.Add(new($"{coordinates}: missing talos extension"));
-                        continue;
-                    }
-
-                    if (shortFormValues.Count > 1)
-                    {
-                        images.Add(new($"{coordinates}: found multiple short form values"));
-                        continue;
-                    }
-
-                    var talosSettings = ParseTalosLines(talosLines, shortFormValues.SingleOrDefault());
-                    if (!talosSettings.IsSuccessful)
-                    {
-                        images.Add(new($"{coordinates}:  {talosSettings.Reason}"));
-                        continue;
-                    }
-
-                    var parsedImage = imageParser.TryParse(image, true);
-                    if (!parsedImage.HasValue)
-                    {
-                        images.Add(new($"{coordinates}: couldn't parse image {image}"));
-                        continue;
-                    }
-
-                    var lineHash = HashUtils.ComputeSha256Hash(lines[line]);
-                    var state = new DockerfileUpdateLocationState
-                    {
-                        Configuration = talosSettings.Value,
-                        Snapshot = new()
-                        {
-                            CurrentImage = parsedImage.Value,
-                            LineHash = lineHash
-                        }
-                    };
-
-
-                    images.Add(new(new DockerfileUpdateLocation()
-                    {
-                        Coordinates = coordinates,
-                        State = state
-                    }));
-                }
+                images.AddRange(ExtractLocations(relativeFilePath, content));
             }
 
             return images;

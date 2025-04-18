@@ -1,4 +1,5 @@
 ﻿using Haondt.Core.Extensions;
+using Haondt.Core.Models;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 using System.Text.RegularExpressions;
@@ -79,6 +80,29 @@ namespace Talos.ImageUpdate.Repositories.Shared.Services
                 }
 
                 var parent = parents[0];
+                var children = groupTargets.Where(t => t != parent)
+                    .Select(q => q.State.Configuration.Sync!.Id).ToList();
+                DetailedResult<string> groupValidityCheck = new();
+                if (parent.State.Configuration.Sync!.Children != null)
+                {
+                    foreach (var desiredChild in parent.State.Configuration.Sync!.Children)
+                        if (!children.Contains(desiredChild))
+                        {
+                            groupValidityCheck = DetailedResult<string>.Failure($"missing child {desiredChild}");
+                            break;
+                        }
+                    foreach (var existingChild in children)
+                        if (!parent.State.Configuration.Sync!.Children.Contains(existingChild))
+                        {
+                            groupValidityCheck = DetailedResult<string>.Failure($"found extra child {existingChild}");
+                            break;
+                        }
+                }
+                if (!groupValidityCheck.IsSuccessful)
+                {
+                    logger.LogWarning("Failed to create group {Group} due to expected child composition mismatch: {Reason}", group, groupValidityCheck.Reason);
+                    continue;
+                }
 
                 var id = UpdateIdentity.Atomic(repositoryConfiguration.NormalizedUrl, repositoryConfiguration.Branch.AsOptional(), groupTargets.Select(q => q.Coordinates.GetIdentity(repositoryConfiguration.NormalizedUrl, repositoryConfiguration.Branch.AsOptional())));
                 var location = AtomicUpdateLocation.Create(parent.State.Configuration, groupTargets);
