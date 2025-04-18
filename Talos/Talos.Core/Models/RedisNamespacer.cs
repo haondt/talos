@@ -4,6 +4,7 @@ namespace Talos.Core.Models
 {
     public static class RedisNamespacer
     {
+        public static string SanitizeId(string id) => id.Replace("_", "__").Replace(':', '_');
         public const string Version = "talos:v2";
         public static class Pushes
         {
@@ -11,31 +12,32 @@ namespace Talos.Core.Models
             public static class Timestamps
             {
                 private static readonly string Segment = $"{Pushes.Segment}:timestamps";
-                public static string Domain(string domain) => $"{Segment}:domain:{domain}";
+                public static string Domain(string domain) => $"{Segment}:domain:{SanitizeId(domain)}";
                 public static string Repo(string repo, Optional<string> branch)
                 {
+                    repo = SanitizeId(repo);
                     if (branch.HasValue)
-                        return $"{Segment}:repo:{repo}/{branch.Value}";
+                        return $"{Segment}:repo:{repo}/{SanitizeId(branch.Value)}";
                     return $"{Segment}:repo:{repo}";
                 }
             }
 
             public static readonly string Queue = $"{Segment}:queue";
-            public static string Push(string id) => $"{Segment}:push:{id}";
+            public static string Push(string id) => $"{Segment}:push:{SanitizeId(id)}";
             public static class DeadLetters
             {
                 private static readonly string Segment = $"{Pushes.Segment}:deadletters";
-                public static string DeadLetter(string id) => $"{Segment}:deadletter:{id}";
+                public static string DeadLetter(string id) => $"{Segment}:deadletter:{SanitizeId(id)}";
                 public static readonly string Queue = $"{Segment}:queue";
             }
         }
 
-        public static string UpdateTarget(string id) => $"{Version}:target:{id}";
+        public static string UpdateTarget(string id) => $"{Version}:target:{SanitizeId(id)}";
         public static class Skopeo
         {
             private static readonly string Segment = $"{Version}:skopeo";
-            public static string Tags(string id) => $"{Segment}:tags:{id}";
-            public static string Inspect(string id) => $"{Segment}:inspect:{id}";
+            public static string Tags(string id) => $"{Segment}:tags:{SanitizeId(id)}";
+            public static string Inspect(string id) => $"{Segment}:inspect:{SanitizeId(id)}";
         }
 
         public static class Git
@@ -62,11 +64,11 @@ namespace Talos.Core.Models
             {
                 private static readonly string Segment = $"{Discord.Segment}:interaction";
 
-                public static string ImageUpdate(string id) => $"{Segment}:imageupdate:{id}";
+                public static string ImageUpdate(string id) => $"{Segment}:imageupdate:{SanitizeId(id)}";
                 public static class Component
                 {
                     private static readonly string Segment = $"{Interaction.Segment}:component";
-                    public static string Message(string id) => $"{Segment}:message:{id}";
+                    public static string Message(string id) => $"{Segment}:message:{SanitizeId(id)}";
                 }
             }
 

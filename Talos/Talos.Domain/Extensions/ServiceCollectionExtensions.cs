@@ -6,7 +6,7 @@ using Talos.Domain.Abstractions;
 using Talos.Domain.Commands;
 using Talos.Domain.Models;
 using Talos.Domain.Services;
-using Talos.Renovate.Abstractions;
+using Talos.ImageUpdate.UpdatePushing.Services;
 
 namespace Talos.Domain.Extensions
 {
@@ -20,6 +20,8 @@ namespace Talos.Domain.Extensions
             services.AddSingleton<IDiscordCommandProcessRegistry, DiscordCommandProcessRegistry>();
             services.AddSingleton<IDiscordNotificationService, DiscordNotificationService>();
             services.AddSingleton<INotificationService>(sp => sp.GetRequiredService<IDiscordNotificationService>());
+            services.AddSingleton<ITalosNotificationService>(sp => sp.GetRequiredService<IDiscordNotificationService>());
+
             services.AddSingleton<IWebHookAuthenticationService, WebhookAuthenticationService>();
             services.Configure<ApiSettings>(configuration.GetSection(nameof(ApiSettings)));
             return services;

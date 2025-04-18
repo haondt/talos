@@ -10,8 +10,11 @@ using Talos.Core.Models;
 using Talos.Discord.Models;
 using Talos.Domain.Abstractions;
 using Talos.Domain.Models;
-using Talos.Renovate.Abstractions;
-using Talos.Renovate.Models;
+using Talos.ImageUpdate.ImageUpdating.Services;
+using Talos.ImageUpdate.Redis.Services;
+using Talos.ImageUpdate.Shared.Constants;
+using Talos.ImageUpdate.UpdatePushing.Models;
+using Talos.ImageUpdate.UpdatePushing.Services;
 
 namespace Talos.Domain.Services
 {

@@ -8,7 +8,7 @@ using Talos.Domain.Abstractions;
 using Talos.Domain.Models;
 using Talos.Domain.Models.DiscordEmbedSocket;
 using Talos.Domain.Services;
-using Talos.Renovate.Abstractions;
+using Talos.ImageUpdate.UpdatePushing.Services;
 
 namespace Talos.Domain.Commands
 {

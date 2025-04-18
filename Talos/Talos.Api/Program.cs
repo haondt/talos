@@ -11,8 +11,8 @@ using Talos.Discord.Extensions;
 using Talos.Docker.Extensions;
 using Talos.Domain.Extensions;
 using Talos.Domain.Services;
+using Talos.ImageUpdate.Shared.Extensions;
 using Talos.Integration.Command.Extensions;
-using Talos.Renovate.Extensions;
 
 StorageKeyConvert.DefaultSerializerSettings.TypeNameStrategy = TypeNameStrategy.SimpleTypeConverter;
 
@@ -34,7 +34,7 @@ if (builder.Environment.IsDevelopment())
 builder.Configuration.AddEnvironmentVariables();
 builder.Services.AddTalosDiscordServices(builder.Configuration)
     .AddTalosDockerServices(builder.Configuration)
-    .AddTalosRenovateServices(builder.Configuration)
+    .AddTalosImageUpdateServices(builder.Configuration)
     .AddTalosIntegrationServices(builder.Configuration)
     .AddTalosServices(builder.Configuration)
     .AddTalosApiServices(builder.Configuration)

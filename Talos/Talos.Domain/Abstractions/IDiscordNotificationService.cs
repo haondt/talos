@@ -1,9 +1,9 @@
 ﻿using Discord.WebSocket;
-using Talos.Renovate.Abstractions;
+using Talos.Domain.Services;
 
 namespace Talos.Domain.Abstractions
 {
-    public interface IDiscordNotificationService : INotificationService
+    public interface IDiscordNotificationService : ITalosNotificationService
     {
         Task CompleteInteractionAsync(string id, SocketInteraction interaction);
     }

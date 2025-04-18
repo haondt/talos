@@ -1,7 +1,7 @@
 ﻿using Talos.Renovate.Abstractions;
 using Talos.Renovate.Models;
 
-namespace Talos.Renovate.Tests
+namespace Talos.Renovate.Tests.Fakes
 {
     internal class FakeSkopeoService(Dictionary<string, List<string>> tagsByName, Dictionary<string, string> digestsByNameAndTag) : ISkopeoService
     {

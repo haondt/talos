@@ -80,10 +80,5 @@ namespace Talos.Renovate.Models
     }
 
 
-    public class UpdateOperation
-    {
-
-    }
-
 
 }

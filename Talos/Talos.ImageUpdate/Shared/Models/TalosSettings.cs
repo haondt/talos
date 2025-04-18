@@ -1,42 +1,7 @@
-using Haondt.Core.Models;
-using YamlDotNet.Serialization;
+﻿using Haondt.Core.Models;
 
-namespace Talos.Renovate.Models
+namespace Talos.ImageUpdate.Shared.Models
 {
-    public class DockerComposeFile
-    {
-        public Dictionary<string, Service>? Services { get; set; }
-    }
-
-    public class Service
-    {
-        public string? Image { get; set; }
-
-        [YamlMember(Alias = "x-talos", ApplyNamingConventions = false)]
-        public TalosSettings? XTalos { get; set; }
-
-        // compact form for configuration. some examples:
-        // x-tl: x # skip
-        // x-tl: ~ # max bump size patch, notify all
-        // x-tl: +! # max bump size major, push all
-        // x-tl: ^? # max bump size minor, prompt all
-        // x-tl: ~:!? # max bump size patch, digest = push, patch = prompt
-        // x-tl: @:!!!! # max bump size digest, digest = push, everything else is push but will be ignored because the max is digest
-        // x-tl: +:! # max bump size major, digest = push, everything else is the default (notify)
-        //
-        // in sum:
-        // x = skip
-        // 1st character is the max bump size (+^~@) for (major, minor, patch, digest)
-        // if there is no second character, notify all
-        // if the second character is not a colon, then it is the strategy to use for all levels
-        //  (*?.!) = notify, prompt, skip, push
-        // if the second character is a colon, the following characters specify the strategy for the
-        // digest, patch, minor and major in that order. if there are less than 4 characters given, 
-        // then we assume prompt for the missing ones
-        [YamlMember(Alias = "x-tl", ApplyNamingConventions = false)]
-        public string? XTalosShort { get; set; }
-    }
-
     public class TalosSettings
     {
         public bool Skip { get; set; } = false;
@@ -126,37 +91,5 @@ namespace Talos.Renovate.Models
                 _ => new($"Unrecognized bump strategy {shortForm}")
             };
         }
-    }
-
-
-    public class BumpStrategySettings
-    {
-        public BumpStrategy Digest { get; set; } = BumpStrategy.Notify;
-        public BumpStrategy Patch { get; set; } = BumpStrategy.Notify;
-        public BumpStrategy Minor { get; set; } = BumpStrategy.Notify;
-        public BumpStrategy Major { get; set; } = BumpStrategy.Notify;
-    }
-
-    public enum BumpStrategy
-    {
-        Notify,
-        Prompt,
-        Skip,
-        Push,
-    }
-
-    public class SyncSettings
-    {
-        public required SyncRole Role { get; set; }
-        public required string Group { get; set; }
-        public required string Id { get; set; }
-        public List<string> Children { get; set; } = [];
-        public bool Digest { get; set; } = true;
-    }
-
-    public enum SyncRole
-    {
-        Parent,
-        Child
     }
 }

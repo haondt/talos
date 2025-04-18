@@ -1,21 +1,18 @@
 ﻿using Haondt.Core.Models;
-using Microsoft.Extensions.Options;
 using StackExchange.Redis;
 using System.Security.Cryptography;
 using Talos.Core.Abstractions;
 using Talos.Core.Models;
-using Talos.Renovate.Abstractions;
-using Talos.Renovate.Models;
+using Talos.ImageUpdate.Redis.Services;
 
 namespace Talos.Domain.Services
 {
     public class WebhookAuthenticationService(
-        IOptions<RedisSettings> redisSettings,
         ITracer<WebhookAuthenticationService> tracer,
         IRedisProvider redisProvider) : IWebHookAuthenticationService
     {
         private const int API_KEY_LENGTH_BITS = 512;
-        private readonly IDatabase _redis = redisProvider.GetDatabase(redisSettings.Value.DefaultDatabase);
+        private readonly IDatabase _redis = redisProvider.GetDefaultDatabase();
         private readonly SemaphoreSlim _lock = new(1, 1);
 
         public async Task<string> GenerateApiTokenAsync(string name)

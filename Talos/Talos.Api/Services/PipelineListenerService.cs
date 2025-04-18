@@ -3,15 +3,16 @@ using Haondt.Core.Models;
 using Talos.Api.Models;
 using Talos.Core.Abstractions;
 using Talos.Core.Extensions;
-using Talos.Renovate.Abstractions;
-using Talos.Renovate.Models;
+using Talos.Domain.Models;
+using Talos.Domain.Services;
+using Talos.ImageUpdate.Repositories.Shared.Services;
 
 namespace Talos.Api.Services
 {
     public class PipelineListenerService(
         ITracer<PipelineListenerService> tracer,
-        INotificationService notificationService,
-        IImageUpdaterService imageUpdaterService,
+        ITalosNotificationService notificationService,
+        IRepositoryService repositoryService,
         ILogger<PipelineListenerService> logger) : BackgroundService
     {
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -53,7 +54,7 @@ namespace Talos.Api.Services
                 return;
 
             // discard pipelines instigated by other sources
-            if (!await imageUpdaterService.CheckIfCommitBelongsToUs(pipelineEvent.ObjectAttributes.Sha))
+            if (!await repositoryService.CheckIfCommitBelongsToUs(pipelineEvent.ObjectAttributes.Sha))
                 return;
 
             try

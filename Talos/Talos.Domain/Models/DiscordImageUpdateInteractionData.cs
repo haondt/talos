@@ -1,4 +1,4 @@
-﻿using Talos.Renovate.Models;
+﻿using Talos.ImageUpdate.UpdatePushing.Models;
 
 namespace Talos.Domain.Models
 {
