@@ -241,6 +241,8 @@ namespace Talos.ImageUpdate.Repositories.Dockerfile.Services
                     }
                 };
 
+                if (state.Configuration.Skip)
+                    continue;
 
                 images.Add(new(new DockerfileUpdateLocation()
                 {

@@ -83,7 +83,6 @@ namespace Talos.ImageUpdate.ImageUpdating.Services
                 _ => throw new ArgumentException($"Unknown {nameof(BumpStrategy)} {push.Value.BumpSize}")
             };
 
-
             switch (strategy)
             {
                 case BumpStrategy.Push:
