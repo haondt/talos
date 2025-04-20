@@ -1,6 +1,7 @@
 ﻿using Haondt.Core.Extensions;
 using Haondt.Core.Models;
 using Newtonsoft.Json;
+using Talos.ImageUpdate.ImageParsing.Models;
 using Talos.ImageUpdate.Repositories.Atomic.Models;
 using Talos.ImageUpdate.Repositories.DockerCompose.Services;
 using Talos.ImageUpdate.Repositories.Shared.Models;
@@ -42,7 +43,7 @@ namespace Talos.ImageUpdate.Repositories.DockerCompose.Models
         }
 
         [JsonIgnore]
-        public string CommitMessage => $"{Snapshot.CurrentImage.ToShortString()} -> {Update.NewImage.ToShortString()}";
+        public string CommitMessage => $"{ParsedImage.DiffString(Snapshot.CurrentImage, Update.NewImage.TagAndDigest)}";
 
         public DetailedResult<ISubatomicUpdateLocationSnapshot, string> StageWrite(Func<string, DetailedResult<string, string>> fileReader, Action<string, string> fileWriter)
         {

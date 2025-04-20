@@ -144,7 +144,7 @@ USER app
                 }),
             };
 
-            locations.Should().HaveCount(6);
+            locations.Should().HaveCount(4);
             locations[0].Value.Should().BeEquivalentTo(new DockerfileUpdateLocation()
             {
                 Coordinates = new()
@@ -182,46 +182,6 @@ USER app
             {
                 Coordinates = new()
                 {
-                    Line = 13,
-                    RelativeFilePath = "./Dockerfile"
-                },
-                State = new()
-                {
-                    Configuration = new()
-                    {
-                        Skip = true,
-                    },
-                    Snapshot = new()
-                    {
-                        CurrentImage = parsedImage,
-                        LineHash = HashUtils.ComputeSha256Hash(lines[13])
-                    }
-                }
-            });
-            locations[3].Value.Should().BeEquivalentTo(new DockerfileUpdateLocation()
-            {
-                Coordinates = new()
-                {
-                    Line = 17,
-                    RelativeFilePath = "./Dockerfile"
-                },
-                State = new()
-                {
-                    Configuration = new()
-                    {
-                        Skip = true,
-                    },
-                    Snapshot = new()
-                    {
-                        CurrentImage = parsedImage,
-                        LineHash = HashUtils.ComputeSha256Hash(lines[17])
-                    }
-                }
-            });
-            locations[4].Value.Should().BeEquivalentTo(new DockerfileUpdateLocation()
-            {
-                Coordinates = new()
-                {
                     Line = 21,
                     RelativeFilePath = "./Dockerfile"
                 },
@@ -244,7 +204,7 @@ USER app
                     }
                 }
             });
-            locations[5].Value.Should().BeEquivalentTo(new DockerfileUpdateLocation()
+            locations[3].Value.Should().BeEquivalentTo(new DockerfileUpdateLocation()
             {
                 Coordinates = new()
                 {

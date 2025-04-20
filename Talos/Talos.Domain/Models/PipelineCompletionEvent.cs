@@ -7,6 +7,7 @@ namespace Talos.Domain.Models
         public required string Id { get; set; }
         public required string Url { get; set; }
         public required string RepositorySlug { get; set; }
+        public required string BranchSlug { get; set; }
 
         public required string CommitShortSha { get; set; }
         public required string CommitUrl { get; set; }

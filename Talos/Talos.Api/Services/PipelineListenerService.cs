@@ -68,6 +68,7 @@ namespace Talos.Api.Services
                 await notificationService.Notify(new PipelineCompletionEvent
                 {
                     RepositorySlug = pipelineEvent.Project.PathWithNamespace,
+                    BranchSlug = pipelineEvent.ObjectAttributes.Ref,
                     CommitShortSha = pipelineEvent.Commit.TruncatedId,
                     CommitUrl = pipelineEvent.Commit.Url,
                     CommitTitle = pipelineEvent.Commit.Title.AsOptional(),

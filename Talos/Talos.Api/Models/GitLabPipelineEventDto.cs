@@ -43,6 +43,8 @@ namespace Talos.Api.Models
         public required string Url { get; set; }
         [JsonRequired]
         public required string Sha { get; set; }
+        [JsonRequired]
+        public required string Ref { get; set; }
 
         public int? Duration { get; set; }
     }

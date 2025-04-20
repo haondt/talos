@@ -2,6 +2,7 @@
 using Haondt.Core.Models;
 using Newtonsoft.Json;
 using Talos.Core.Models;
+using Talos.ImageUpdate.ImageParsing.Models;
 using Talos.ImageUpdate.Repositories.Atomic.Models;
 using Talos.ImageUpdate.Repositories.Dockerfile.Services;
 using Talos.ImageUpdate.Repositories.Shared.Models;
@@ -18,7 +19,7 @@ namespace Talos.ImageUpdate.Repositories.Dockerfile.Models
         [JsonIgnore]
         public string NewVersionFriendlyString => Update.NewImage.ToShortString();
         [JsonIgnore]
-        public string CommitMessage => $"{Snapshot.CurrentImage.ToShortString()} -> {Update.NewImage.ToShortString()}";
+        public string CommitMessage => $"{ParsedImage.DiffString(Snapshot.CurrentImage, Update.NewImage.TagAndDigest)}";
         [JsonIgnore]
         public IReadOnlyDictionary<string, int> UpdatesPerDomain => new Dictionary<string, int> { [Update.NewImage.Domain.Or("")] = 1 };
         public DetailedResult<IUpdateLocationSnapshot, string> Write(string repositoryDirectory)

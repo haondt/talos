@@ -28,12 +28,23 @@ namespace Talos.ImageUpdate.ImageParsing.Models
             var sb = new StringBuilder(Name);
             if (!TagAndDigest.HasValue)
                 return sb.ToString();
-            sb.Append(':' + TagAndDigest.Value.Tag.ToString());
-            if (TagAndDigest.Value.Digest.HasValue)
-                if (TagAndDigest.Value.Digest.Value.StartsWith("sha256:"))
-                    sb.Append(string.Concat("@", TagAndDigest.Value.Digest.Value.AsSpan("sha256:".Length, 8)));
-                else
-                    sb.Append(string.Concat("@", TagAndDigest.Value.Digest.Value.AsSpan(0, 8)));
+            sb.Append(':' + TagAndDigest.Value.ToShortString());
+            return sb.ToString();
+        }
+
+        public static string DiffString(ParsedImage source, Optional<ParsedTagAndDigest> destination)
+        {
+            var sb = new StringBuilder(source.Name);
+            sb.Append(": ");
+            if (source.TagAndDigest.HasValue)
+                sb.Append(source.TagAndDigest.Value.ToShortString());
+            else
+                sb.Append("(untagged)");
+            sb.Append(" → ");
+            if (destination.HasValue)
+                sb.Append(destination.Value.ToShortString());
+            else
+                sb.Append("(untagged)");
             return sb.ToString();
         }
     }

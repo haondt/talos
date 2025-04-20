@@ -247,7 +247,7 @@ namespace Talos.Domain.Services
         public async Task Notify(PipelineCompletionEvent pipelineCompleted)
         {
             var descriptionSb = new StringBuilder("**Pipeline Completed**\n");
-            descriptionSb.AppendLine($"-# {pipelineCompleted.RepositorySlug}\n");
+            descriptionSb.AppendLine($"-# {pipelineCompleted.RepositorySlug} » {pipelineCompleted.BranchSlug}\n");
             descriptionSb.AppendLine($"Pipeline [{pipelineCompleted.Id}]({pipelineCompleted.Url})");
             var statusSb = new StringBuilder($"{(pipelineCompleted.Status == PipelineStatus.Success ? "Succeeded" : "Failed")}");
             if (pipelineCompleted.Duration.HasValue)

@@ -16,5 +16,17 @@ namespace Talos.ImageUpdate.ImageParsing.Models
                 sb.Append($"@{Digest.Value}");
             return sb.ToString();
         }
+
+        public string ToShortString()
+        {
+            var sb = new StringBuilder();
+            sb.Append(Tag.ToString());
+            if (Digest.HasValue)
+                if (Digest.Value.StartsWith("sha256:"))
+                    sb.Append(string.Concat("@", Digest.Value.AsSpan("sha256:".Length, 8)));
+                else
+                    sb.Append(string.Concat("@", Digest.Value.AsSpan(0, 8)));
+            return sb.ToString();
+        }
     }
 }
