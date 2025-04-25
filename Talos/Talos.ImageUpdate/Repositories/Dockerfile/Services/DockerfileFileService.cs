@@ -166,7 +166,7 @@ namespace Talos.ImageUpdate.Repositories.Dockerfile.Services
         {
             var images = new List<DetailedResult<IUpdateLocation, string>>();
             const string talosLinePattern = @"^#\s+(?i)!talos(?-i)(?:\s+(?:[\w.]+=[\w.]+))*\s*$";
-            const string talosShortFormPattern = @"^#\s+(?i)!talos:\s+(?<value>\S+)\s*$";
+            const string talosShortFormPattern = @"^#\s+(?i)!tl\s+(?<value>\S+)\s*$";
 
             var lines = content.Split(Environment.NewLine);
 

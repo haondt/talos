@@ -109,7 +109,7 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base2
 USER app
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base3
-# !talos: x
+# !tl x
 USER app
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base4
@@ -122,7 +122,7 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base5
 USER app
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base6
-# !talos: +!
+# !tl +!
 USER app
 ";
 
