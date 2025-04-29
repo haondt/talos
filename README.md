@@ -149,10 +149,21 @@ Each repository references a host, which provides info on how to connect and aut
                 "Url": "https://gitlab.com/haondt/my-repository",
                 "Host": "gitlab", // references Hosts section
                 "Branch": "main",
-                "IncludeGlobs": [ // globs of docker compose files to watch
-                    "docker-compose.yml",
-                    "docker-compose.*.yml"
-                ],
+                "Glob": { // globs of files to watch
+                    "DockerCompose": {
+                        "IncludeGlobs": [
+                            "docker-compose.yml",
+                            "docker-compose.*.yml"
+                        ]
+                    },
+                    "Dockerfile": {
+                        "IncludeGlobs": [
+                            "Dockerfile",
+                            "*.Dockerfile"
+                        ]
+                    }
+
+                }
                 "CooldownSeconds": 300
             }
         ]
@@ -187,6 +198,32 @@ Some container registries have limits on how often you can pull from them. Talos
     }
 }
 ```
+
+#### Opting In
+
+Talos can manage both docker compose files and dockerfiles. An image in either file must opt-in in order to be manages by Talos.
+
+To opt in a docker compose image, the service must have an `x-talos` extension.
+
+```yml
+services:
+  helloworld:
+    image: hello-world
+    x-talos:
+      bump: minor
+      strategy:
+        digest: push
+```
+
+To opt in a dockerfile, the image must have a comment underneath it that begins with `!talos`. The configuration is made up of space-delimited key-value pairs, and one or more `!talos` comments can be added for a single image.
+
+```dockerfile
+FROM hello-world
+# !talos skip=false bump=minor
+# !talos strategy.digest=push
+```
+
+Both are compatible with the "short form" (explained below), using `x-tl:` as the docker compose extension and `!tl` as the dockerfile prefix.
 
 #### Update Strategy
 
@@ -227,6 +264,44 @@ So `v1.2.3` can be bumped to `v1.3.0`, but not to `v1.3`.
 <div align="center">
     <img src="docs/images/prompt.png">
 </div>
+
+#### Image Synchronization
+
+Talos can keep two or more image versions in sync. This means they will be made to always have the same version, and if a particular version update is available for one but not the other, Talos will hold off until they can both be updated. Additionally, the updates will be applied atomically, so Talos will wait until there is a suitable gap in the throttling mechanisms large enough to allow for all the synced images to be updated together.
+
+To synchronize a group of images, each image in the group will need the `sync.id`, `sync.role` and `sync.group` attributes. The `group` identifies the sync group, the `id` identifies the images identity relative to the group and the `role` identifies the images role in the group, either `parent` or `child`. A group must have exactly one parent, as the parent will define the update strategy for the entire group.
+
+The parent may optionally also add a `children` attribute, which lists out all the children that should be part of the group. Talos will refuse to update the group unless it can successfully find both the parent and all the expected members of the group.
+
+Lastly, the parent may also specify the optional attribute `digest`. If set to true, Talos will synchronize both the image tag and the digest, otherwise it will only look at the tag and consider all digests as valid.
+
+```yml
+services:
+  immich-server:
+    image: ghcr.io/immich-app/immich-server:v1.128.0
+    x-talos:
+      skip: false
+      bump: Major
+      strategy:
+        digest: Skip
+        patch: Push
+        minor: Push
+        major: Prompt
+      sync:
+        role: parent
+        group: immich
+        id: server
+        children: [ml]
+        digest: false
+  immich-machine-learning:
+    image: ghcr.io/immich-app/immich-machine-learning:v1.128.0
+    x-talos:
+      skip: false
+      sync:
+        role: child
+        group: immich
+        id: ml
+```
 
 #### Compact Form
 
