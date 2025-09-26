@@ -2,7 +2,7 @@
 
 namespace Talos.ImageUpdate.Shared.Models
 {
-    public class TalosSettings
+    public record TalosSettings
     {
         public bool Skip { get; set; } = false;
         public BumpSize Bump { get; set; } = BumpSize.Digest;

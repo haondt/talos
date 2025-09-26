@@ -1,4 +1,5 @@
-﻿using Haondt.Core.Models;
+﻿using Haondt.Core.Extensions;
+using Haondt.Core.Models;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;

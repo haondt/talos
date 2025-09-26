@@ -44,7 +44,7 @@ namespace Talos.Api.Services
             return new OpenTelemetrySpan(span);
         }
 
-        public Optional<string> CurrentTraceId => Activity.Current.AsOptional().As(a => a.TraceId.ToString());
-        public Optional<string> CurrentSpanId => Activity.Current.AsOptional().As(a => a.SpanId.ToString());
+        public Optional<string> CurrentTraceId => Activity.Current.AsOptional().Map(a => a.TraceId.ToString());
+        public Optional<string> CurrentSpanId => Activity.Current.AsOptional().Map(a => a.SpanId.ToString());
     }
 }

@@ -280,7 +280,7 @@ namespace Talos.ImageUpdate.Tests
         public async Task WillSelectCorrectUpdateTarget(string name, Optional<string> currentTagAndDigest, BumpSize maxBumpSize, Dictionary<string, List<string>> tagsByName, Dictionary<string, string> digestsByNameAndTag, Optional<(string TagAndDigest, BumpSize BumpSize)> expectedResult)
         {
             var sut = GetSut(new FakeSkopeoService(tagsByName, digestsByNameAndTag));
-            var currentFullImage = currentTagAndDigest.As(q => $"{name}:{q}").Or(name);
+            var currentFullImage = currentTagAndDigest.Map(q => $"{name}:{q}").Or(name);
             var becauseString = $"the image was {currentFullImage} with maxBump {maxBumpSize}";
 
             var imageParser = fixture.ServiceProvider.GetRequiredService<IImageParser>();

@@ -13,6 +13,8 @@ namespace Talos.ImageUpdate.Shared.Constants
         public static JsonSerializerSettings SkopeoSerializerSettings { get; }
 
         public static IDeserializer DockerComposeDeserializer { get; }
+        public static IDeserializer YamlDeserializer { get; }
+        public static ISerializer YamlSerializer { get; }
 
         static SerializationConstants()
         {
@@ -43,6 +45,15 @@ namespace Talos.ImageUpdate.Shared.Constants
             DockerComposeDeserializer = new DeserializerBuilder()
                 .WithNamingConvention(HyphenatedNamingConvention.Instance)
                 .IgnoreUnmatchedProperties()
+                .Build();
+
+            YamlDeserializer = new DeserializerBuilder()
+                .WithNamingConvention(HyphenatedNamingConvention.Instance)
+                .IgnoreUnmatchedProperties()
+                .Build();
+
+            YamlSerializer = new SerializerBuilder()
+                .WithNamingConvention(HyphenatedNamingConvention.Instance)
                 .Build();
 
             TraceSerializerSettings = new JsonSerializerSettings();

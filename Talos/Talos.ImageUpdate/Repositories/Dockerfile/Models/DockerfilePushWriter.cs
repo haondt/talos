@@ -1,56 +1,19 @@
-﻿using Haondt.Core.Extensions;
-using Haondt.Core.Models;
-using Newtonsoft.Json;
+﻿using Haondt.Core.Models;
 using Talos.Core.Models;
-using Talos.ImageUpdate.ImageParsing.Models;
 using Talos.ImageUpdate.Repositories.Atomic.Models;
 using Talos.ImageUpdate.Repositories.Dockerfile.Services;
-using Talos.ImageUpdate.Repositories.Shared.Models;
 
 namespace Talos.ImageUpdate.Repositories.Dockerfile.Models
 {
-    public record DockerfilePushWriter : ISubatomicPushToFileWriter
+    public record DockerfilePushWriter : AbstractSubatomicPushWriter<DockerfileUpdateLocationCoordinates, DockerfileUpdateLocationSnapshot>
     {
-        public required ImageUpdateOperation Update { get; init; }
-        public required DockerfileUpdateLocationCoordinates Coordinates { get; init; }
-        public required DockerfileUpdateLocationSnapshot Snapshot { get; init; }
-        [JsonIgnore]
-        public string CurrentVersionFriendlyString => Snapshot.CurrentImage.ToShortString();
-        [JsonIgnore]
-        public string NewVersionFriendlyString => Update.NewImage.ToShortString();
-        [JsonIgnore]
-        public string CommitMessage => $"{ParsedImage.DiffString(Snapshot.CurrentImage, Update.NewImage.TagAndDigest)}";
-        [JsonIgnore]
-        public IReadOnlyDictionary<string, int> UpdatesPerDomain => new Dictionary<string, int> { [Update.NewImage.Domain.Or("")] = 1 };
-        public DetailedResult<IUpdateLocationSnapshot, string> Write(string repositoryDirectory)
+        protected override DetailedResult<string, string> ReadFileContent(Func<string, DetailedResult<string, string>> fileReader)
         {
-            var stagedFileWrites = new Dictionary<string, string>();
-
-            DetailedResult<string, string> stagedFileReader(string relativeFilePath)
-            {
-                var filePath = Path.Combine(repositoryDirectory, relativeFilePath);
-                if (!File.Exists(filePath))
-                    return DetailedResult<string, string>.Fail($"Could not find file at {relativeFilePath}");
-                var fileContent = File.ReadAllText(filePath);
-                return DetailedResult<string, string>.Succeed(fileContent);
-            }
-            void stagedFileWriter(string relativeFilePath, string content)
-            {
-                File.WriteAllText(Path.Combine(repositoryDirectory, relativeFilePath), content);
-            }
-
-            var result = StageWrite(stagedFileReader, stagedFileWriter);
-            if (result.IsSuccessful)
-                return new(result.Value);
-            return new(result.Reason);
+            return fileReader(Coordinates.RelativeFilePath);
         }
 
-        public DetailedResult<ISubatomicUpdateLocationSnapshot, string> StageWrite(Func<string, DetailedResult<string, string>> fileReader, Action<string, string> fileWriter)
+        protected override DetailedResult<(string NewFileContent, DockerfileUpdateLocationSnapshot Snapshot), string> UpdateFileContent(string fileContent)
         {
-            var fileContentResult = fileReader(Coordinates.RelativeFilePath);
-            if (!fileContentResult.IsSuccessful)
-                return new(fileContentResult.Reason);
-            var fileContent = fileContentResult.Value;
             var fileLines = fileContent.Split(Environment.NewLine);
 
             if (Coordinates.Line >= fileLines.Length)
@@ -64,23 +27,16 @@ namespace Talos.ImageUpdate.Repositories.Dockerfile.Models
                 return new($"Could not update file at {Coordinates.RelativeFilePath}: {setResult.Reason}");
 
             var (updatedContent, newLine) = setResult.Value;
-            fileWriter(Coordinates.RelativeFilePath, updatedContent);
-            return new(new DockerfileUpdateLocationSnapshot()
+            return new((updatedContent, new()
             {
                 CurrentImage = Update.NewImage,
                 LineHash = HashUtils.ComputeSha256Hash(newLine),
-            });
+            }));
         }
 
-        public bool IsNewerThan(IPushToFileWriter other)
+        protected override void WriteFileContent(Action<string, string> fileWriter, string fileContent)
         {
-            if (other is not DockerfilePushWriter otherWriter)
-                return true;
-            if (otherWriter.Update.NewImageCreatedOn >= Update.NewImageCreatedOn)
-                return false;
-            return true;
+            fileWriter(Coordinates.RelativeFilePath, fileContent);
         }
-
-        public bool IsNewerThan(ISubatomicPushToFileWriter other) => IsNewerThan((IPushToFileWriter)other);
     }
 }

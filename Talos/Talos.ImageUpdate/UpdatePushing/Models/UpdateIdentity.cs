@@ -57,9 +57,24 @@ namespace Talos.ImageUpdate.UpdatePushing.Models
             };
         }
 
+        public static UpdateIdentity YamlFile(string gitRemoteUrl, Optional<string> gitBranch, string relativeFilePath, int start, int end)
+        {
+            var hashInput = $"{relativeFilePath}:{start}:{end}";
+            var hash = HashUtils.ComputeSha256HashHexString(hashInput);
+
+            return new()
+            {
+                GitRemoteUrl = gitRemoteUrl,
+                GitBranch = gitBranch,
+                Type = UpdateType.YamlFile,
+                Hash = hash,
+                ShortFriendlyHashData = hashInput
+            };
+        }
+
         public override string ToString()
         {
-            var branchInfix = GitBranch.As(q => $"[{q}]").Or("");
+            var branchInfix = GitBranch.Map(q => $"[{q}]").Or("");
             return $"{Type}/{GitRemoteUrl}{branchInfix}/{Hash}".Replace("_", "__").Replace(":", "_");
         }
     }

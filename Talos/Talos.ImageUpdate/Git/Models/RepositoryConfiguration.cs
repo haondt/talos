@@ -16,6 +16,16 @@
     {
         public RepositoryFileTypeGlobbingConfiguration? Dockerfile { get; set; }
         public RepositoryFileTypeGlobbingConfiguration? DockerCompose { get; set; }
+        public RepositoryYamlGlobbingConfiguration? Yaml { get; set; }
+    }
+
+    public class RepositoryYamlGlobbingConfiguration
+    {
+        public List<string>? IncludeGlobs { get; set; }
+        public List<string>? ExcludeGlobs { get; set; }
+        public required string AncestorPath { get; set; }
+        public required string RelativeImagePath { get; set; }
+        public required string RelativeTalosPath { get; set; }
     }
 
     public class RepositoryFileTypeGlobbingConfiguration

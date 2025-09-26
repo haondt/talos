@@ -258,6 +258,9 @@ namespace Talos.ImageUpdate.Repositories.Dockerfile.Services
         public List<DetailedResult<IUpdateLocation, string>> ExtractLocations(RepositoryConfiguration repository, string clonedRepositoryDirectory)
         {
             var images = new List<DetailedResult<IUpdateLocation, string>>();
+            if (repository.Glob.Dockerfile == null)
+                return images;
+
             foreach (var (absoluteFilePath, relativeFilePath) in GetDockerfileTargets(clonedRepositoryDirectory, repository))
             {
                 var content = File.ReadAllText(absoluteFilePath);

@@ -1,23 +1,20 @@
 ﻿using Haondt.Core.Models;
 using Talos.ImageUpdate.Repositories.Atomic.Models;
-using Talos.ImageUpdate.Repositories.DockerCompose.Services;
 
-namespace Talos.ImageUpdate.Repositories.DockerCompose.Models
+namespace Talos.ImageUpdate.Repositories.Yaml.Models
 {
-    public record DockerComposePushWriter : AbstractSubatomicPushWriter<DockerComposeUpdateLocationCoordinates, DockerComposeUpdateLocationSnapshot>
+    public record YamlPushWriter : AbstractSubatomicPushWriter<YamlUpdateLocationCoordinates, YamlUpdateLocationSnapshot>
     {
         protected override DetailedResult<string, string> ReadFileContent(Func<string, DetailedResult<string, string>> fileReader)
         {
             return fileReader(Coordinates.RelativeFilePath);
         }
 
-        protected override DetailedResult<(string NewFileContent, DockerComposeUpdateLocationSnapshot Snapshot), string> UpdateFileContent(string fileContent)
+        protected override DetailedResult<(string NewFileContent, YamlUpdateLocationSnapshot Snapshot), string> UpdateFileContent(string fileContent)
         {
-            var setResult = DockerComposeFileService.SetServiceImage(fileContent, Coordinates.ServiceKey, Update.NewImage.ToString());
-            if (!setResult.IsSuccessful)
-                return new($"Could not find target at {Coordinates.RelativeFilePath}:{Coordinates.ServiceKey}: {setResult.Reason}");
+            var previousImageString = fileContent[Coordinates.Start..Coordinates.End];
+            var updatedContent = fileContent[..Coordinates.Start] + Update.NewImage.ToString() + fileContent[Coordinates.End..];
 
-            var (updatedContent, previousImageString) = setResult.Value;
             if (!previousImageString.Trim().Equals(Snapshot.RawCurrentImageString.Trim()))
                 return new($"Expected previous image '{Snapshot.RawCurrentImageString.Trim()}' does not match the actual previous image '{previousImageString.Trim()}'");
 
@@ -33,5 +30,5 @@ namespace Talos.ImageUpdate.Repositories.DockerCompose.Models
             fileWriter(Coordinates.RelativeFilePath, fileContent);
         }
     }
-
 }
+

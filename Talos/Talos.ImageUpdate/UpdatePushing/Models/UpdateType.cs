@@ -4,6 +4,7 @@
     {
         Dockerfile,
         DockerCompose,
-        Atomic
+        Atomic,
+        YamlFile
     }
 }

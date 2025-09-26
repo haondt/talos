@@ -91,8 +91,8 @@ namespace Talos.ImageUpdate.ImageParsing
                 version = new(new SemanticVersion(
                     VersionPrefix: TryExtractNonEmptyGroup(match, "versionprefix"),
                     Major: int.Parse(majorString.Value),
-                    Minor: TryExtractNonEmptyGroup(match, "minor").As(int.Parse),
-                    Patch: TryExtractNonEmptyGroup(match, "patch").As(int.Parse)));
+                    Minor: TryExtractNonEmptyGroup(match, "minor").Map(int.Parse),
+                    Patch: TryExtractNonEmptyGroup(match, "patch").Map(int.Parse)));
             else if (TryExtractNonEmptyGroup(match, "release").TryGetValue(out var release))
                 version = new(release);
             else

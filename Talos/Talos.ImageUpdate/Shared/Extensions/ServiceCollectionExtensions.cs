@@ -16,6 +16,7 @@ using Talos.ImageUpdate.Redis.Services;
 using Talos.ImageUpdate.Repositories.DockerCompose.Services;
 using Talos.ImageUpdate.Repositories.Dockerfile.Services;
 using Talos.ImageUpdate.Repositories.Shared.Services;
+using Talos.ImageUpdate.Repositories.Yaml.Services;
 using Talos.ImageUpdate.Skopeo.Models;
 using Talos.ImageUpdate.Skopeo.Services;
 using Talos.ImageUpdate.UpdatePushing.Models;
@@ -60,6 +61,7 @@ namespace Talos.ImageUpdate.Shared.Extensions
             services.AddSingleton<IRepositoryService, RepositoryService>();
             services.AddSingleton<IRepositoryFileService, DockerfileFileService>();
             services.AddSingleton<IRepositoryFileService, DockerComposeFileService>();
+            services.AddSingleton<IRepositoryFileService, YamlFileService>();
 
             return services;
         }

@@ -25,10 +25,10 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
-        RedisSettings__Endpoint: talos-redis:6379
-        DiscordSettings__BotToken: your-bot-token
-        DiscordSettings__GuildId: 1234
-        DiscordSettings__ChannelId: 1234
+      RedisSettings__Endpoint: talos-redis:6379
+      DiscordSettings__BotToken: your-bot-token
+      DiscordSettings__GuildId: 1234
+      DiscordSettings__ChannelId: 1234
   talos-redis:
     networks:
       - talos
@@ -50,11 +50,11 @@ Talos will only work in the provided guild and will default to the provided chan
 
 ```json
 {
-    "DiscordSettings": {
-        "BotToken": "your-bot-token",
-        "GuildId": 1234567890,
-        "ChannelId": 1234567890
-    }
+  "DiscordSettings": {
+    "BotToken": "your-bot-token",
+    "GuildId": 1234567890,
+    "ChannelId": 1234567890
+  }
 }
 ```
 
@@ -71,13 +71,13 @@ The version sets which `compose` command Talos will use, i.e., V1 = `docker-comp
 
 ```json
 {
-    "DockerSettings": {
-        "Hosts": {
-            "localhost": {
-                "DockerVersion": "V2"
-            }
-        }
+  "DockerSettings": {
+    "Hosts": {
+      "localhost": {
+        "DockerVersion": "V2"
+      }
     }
+  }
 }
 ```
 
@@ -96,18 +96,18 @@ Talos also supports remote hosts over SSH, using an identity file for authentica
 
 ```json
 {
-    "DockerSettings": {
-        "Hosts": {
-            "remote_machine": {
-                "DockerVersion": "V2",
-                "SSHConfig": {
-                    "Host": "163.174.249.51",
-                    "User": "talos",
-                    "IdentityFile": "/config/id_rsa"
-                }
-            }
+  "DockerSettings": {
+    "Hosts": {
+      "remote_machine": {
+        "DockerVersion": "V2",
+        "SSHConfig": {
+          "Host": "163.174.249.51",
+          "User": "talos",
+          "IdentityFile": "/config/id_rsa"
         }
+      }
     }
+  }
 }
 ```
 
@@ -122,12 +122,12 @@ To configure it, you must first tell Talos how often to run scans and what repos
 
 ```json
 {
-    "ImageUpdateSettings": {
-        "Schedule": {
-            "Type": "Delay",
-            "DelaySeconds": 3600 // every hour
-        }
+  "ImageUpdateSettings": {
+    "Schedule": {
+      "Type": "Delay",
+      "DelaySeconds": 3600 // every hour
     }
+  }
 }
 ```
 
@@ -161,8 +161,15 @@ Each repository references a host, which provides info on how to connect and aut
                             "Dockerfile",
                             "*.Dockerfile"
                         ]
+                    },
+                    "Yaml": {
+                        "IncludeGlobs": [
+                            "deployment.yaml"
+                        ],
+                        "AncestorPath": "/spec/template/",
+                        "RelativeImagePath": "/spec/containers/0/image",
+                        "RelativeTalosPath": "/metadata/annotations/haondt.dev\\/talos"
                     }
-
                 }
                 "CooldownSeconds": 300
             }
@@ -188,14 +195,14 @@ Some container registries have limits on how often you can pull from them. Talos
 
 ```json
 {
-    "UpdateThrottlingSettings": {
-        "Domains": {
-            "docker.io": {
-                "Limit": 5,
-                "Per": "Hour"
-            }
-        }
+  "UpdateThrottlingSettings": {
+    "Domains": {
+      "docker.io": {
+        "Limit": 5,
+        "Per": "Hour"
+      }
     }
+  }
 }
 ```
 
@@ -224,6 +231,21 @@ FROM hello-world
 ```
 
 Both are compatible with the "short form" (explained below), using `x-tl:` as the docker compose extension and `!tl` as the dockerfile prefix.
+
+#### Yaml File
+
+One of the options for configuration is just arbitrary yaml files. It has the following configuration options:
+
+- `IncludeGlobs`: `list[str]`
+  - which file globs to include
+- `ExcludeGlobs`: `list[str]`
+  - which file globs to exclude
+- `AncestorPath`: `str`
+  - Path to the "root" object that should be updated. Whatever this returns will be considered a single update target. This is a yaml path, and is interpreted by the YamlPathForYamlDotNet library. You can refer to their [documentation](https://github.com/gfs/YamlPathForYamlDotNet) for syntax. This path may use wildcards or other features to return many objects from a single file.
+- `RelativeImagePath`: `str`
+  - This should give the path to the image string Talos should update, relative to the `AncestorPath`
+- `RelativeTalosPath`: `str`
+  - This should give the path to the Talos configuration, relative to the `AncestorPath`. This can either be an object or a string, and Talos will automatically parse it in the full or short forms accordingly.
 
 #### Update Strategy
 
@@ -360,9 +382,9 @@ The only required configuration is the base URL for webhook generation.
 
 ```json
 {
-    "ApiSettings": {
-        "BaseUrl": "https://mydomain.com"
-    }
+  "ApiSettings": {
+    "BaseUrl": "https://mydomain.com"
+  }
 }
 ```
 
@@ -381,14 +403,14 @@ To use message tracing, enable it and configure the OpenTelemetry endpoint.
 
 ```json
 {
-    "TracingSettings": {
-        "Enabled": true,
-        "Endpoint": "http://localhost:4317",
-        "Protocol": "Grpc",
-        "IncludeTraceLibraries": {
-            "StackExchange.Redis": false
-        }
+  "TracingSettings": {
+    "Enabled": true,
+    "Endpoint": "http://localhost:4317",
+    "Protocol": "Grpc",
+    "IncludeTraceLibraries": {
+      "StackExchange.Redis": false
     }
+  }
 }
 ```
 

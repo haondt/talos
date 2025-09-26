@@ -126,6 +126,8 @@ namespace Talos.ImageUpdate.Repositories.DockerCompose.Services
         public List<DetailedResult<IUpdateLocation, string>> ExtractLocations(RepositoryConfiguration repository, string clonedRepositoryDirectory)
         {
             var images = new List<DetailedResult<IUpdateLocation, string>>();
+            if (repository.Glob.DockerCompose == null)
+                return images;
 
             foreach (var (absoluteFilePath, relativeFilePath) in GetTargetFiles(clonedRepositoryDirectory, repository))
             {

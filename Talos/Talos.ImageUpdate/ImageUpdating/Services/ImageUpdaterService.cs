@@ -51,7 +51,7 @@ namespace Talos.ImageUpdate.ImageUpdating.Services
             // if the location snapshot is different than expected, drop the cache
             if (cached.IsSuccessful && !location.State.Snapshot.IsEquivalentTo(cached.Value.LastKnownSnapshot))
             {
-                var interactionId = cached.Value.Interaction.As(q => q.InteractionId);
+                var interactionId = cached.Value.Interaction.Map(q => q.InteractionId);
                 if (interactionId.HasValue && interactionId.Value.HasValue)
                     await notificationService.DeleteInteraction(interactionId.Value.Value);
                 await updateDataRepository.ClearImageUpdateDataCacheAsync(id);

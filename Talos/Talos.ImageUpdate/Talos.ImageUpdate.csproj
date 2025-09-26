@@ -7,13 +7,14 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Castle.Core" Version="5.2.1" />
-    <PackageReference Include="Haondt.Json" Version="0.2.5" />
-    <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" Version="9.0.2" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.2" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.2" />
-    <PackageReference Include="StackExchange.Redis" Version="2.8.24" />
+    <PackageReference Include="gstocco.YamlDotNet.YamlPath" Version="1.0.26" />
+    <PackageReference Include="Haondt.Json" Version="0.2.10" />
+    <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" Version="9.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.9" />
+    <PackageReference Include="StackExchange.Redis" Version="2.9.17" />
     <PackageReference Include="YamlDotNet" Version="16.3.0" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
   </ItemGroup>
 
 <ItemGroup>
