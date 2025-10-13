@@ -1,4 +1,5 @@
-﻿using Haondt.Core.Models;
+﻿using Haondt.Core.Extensions;
+using Haondt.Core.Models;
 using Talos.ImageUpdate.Repositories.Atomic.Models;
 
 namespace Talos.ImageUpdate.Repositories.Yaml.Models
@@ -13,7 +14,8 @@ namespace Talos.ImageUpdate.Repositories.Yaml.Models
         protected override DetailedResult<(string NewFileContent, YamlUpdateLocationSnapshot Snapshot), string> UpdateFileContent(string fileContent)
         {
             var previousImageString = fileContent[Coordinates.Start..Coordinates.End];
-            var updatedContent = fileContent[..Coordinates.Start] + Update.NewImage.ToString() + fileContent[Coordinates.End..];
+            var newImageString = $"{Snapshot.AnchorName.Map(q => $"&{q} ").Or("")}{Update.NewImage}";
+            var updatedContent = fileContent[..Coordinates.Start] + newImageString + fileContent[Coordinates.End..];
 
             if (!previousImageString.Trim().Equals(Snapshot.RawCurrentImageString.Trim()))
                 return new($"Expected previous image '{Snapshot.RawCurrentImageString.Trim()}' does not match the actual previous image '{previousImageString.Trim()}'");
@@ -21,7 +23,8 @@ namespace Talos.ImageUpdate.Repositories.Yaml.Models
             return new((updatedContent, new()
             {
                 CurrentImage = Update.NewImage,
-                RawCurrentImageString = Update.NewImage.ToString(),
+                RawCurrentImageString = newImageString,
+                AnchorName = Snapshot.AnchorName
             }));
         }
 

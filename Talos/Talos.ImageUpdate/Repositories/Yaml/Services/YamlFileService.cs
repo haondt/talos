@@ -137,8 +137,9 @@ namespace Talos.ImageUpdate.Repositories.Yaml.Services
                         Configuration = talosSettings,
                         Snapshot = new()
                         {
-                            RawCurrentImageString = image,
-                            CurrentImage = parsedImage.Value
+                            RawCurrentImageString = content[coordinates.Start..coordinates.End],
+                            CurrentImage = parsedImage.Value,
+                            AnchorName = scalarImageNode.Anchor.IsEmpty ? new() : new(scalarImageNode.Anchor.ToString())
                         }
                     };
                     images.Add(new(new YamlUpdateLocation
