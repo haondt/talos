@@ -33,6 +33,7 @@ builder.Services.AddTalosDiscordServices(builder.Configuration)
     .AddTalosServices(builder.Configuration)
     .AddTalosApiServices(builder.Configuration)
     .AddSerilog();
+builder.Services.AddHealthChecks();
 
 builder.Logging.ClearProviders()
     .AddSerilog();
@@ -40,6 +41,7 @@ builder.Logging.ClearProviders()
 var app = builder.Build();
 
 app.AddTalosApiEndpoints();
+app.MapHealthChecks("/hc");
 
 
 app.Run();

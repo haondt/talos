@@ -13,6 +13,12 @@ namespace Talos.Api.Extensions
         {
             app.Use(async (context, next) =>
             {
+                if (context.Request.Path == "/hc")
+                {
+                    await next();
+                    return;
+                }
+
                 var authService = context.RequestServices.GetRequiredService<IWebHookAuthenticationService>();
 
                 if (!context.Request.Headers.TryGetValue("Authorization", out var authHeader) ||
