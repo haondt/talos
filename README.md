@@ -62,6 +62,20 @@ Talos will only work in the provided guild and will default to the provided chan
     <img src="docs/images/discord.png">
 </div>
 
+You may also specify specific channels for the type of message.
+
+```json
+{
+  "DiscordSettings": {
+    ...,
+    "ChannelId": 1234567890,
+    "ImageUpdatesChannelId": 1111111111,
+    "PipelineSuccessesChannelId": 2222222222,
+    "PipelineFailuresChannelId": 3333333333
+  }
+}
+```
+
 ### Docker
 
 Talos can connect to Docker hosts both locally and remotely to run Docker operations.

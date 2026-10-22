@@ -1,10 +1,11 @@
-﻿using Discord;
+﻿using System.Diagnostics;
+using System.Text;
+using Discord;
 using Discord.Rest;
 using Discord.WebSocket;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using StackExchange.Redis;
-using System.Text;
 using Talos.Core.Abstractions;
 using Talos.Core.Models;
 using Talos.Discord.Models;
@@ -31,11 +32,18 @@ namespace Talos.Domain.Services
         public const string CompleteInteractionPrefix = "complete-interaction";
         public const string ImageUpdateInteractionInfix = "image-update";
 
-        private async Task<ISocketMessageChannel> GetChannelAsync()
+        private async Task<ISocketMessageChannel> GetChannelAsync(DiscordChannelType channelType = DiscordChannelType.Default)
         {
             await clientState.StartTask;
             using var _ = tracer.StartSpan(nameof(GetChannelAsync), SpanKind.Client);
-            var channelId = discordSettings.Value.ChannelId;
+            var channelId = channelType switch
+            {
+                DiscordChannelType.Default => discordSettings.Value.ChannelId,
+                DiscordChannelType.ImageUpdates => discordSettings.Value.ImageUpdatesChannelId ?? discordSettings.Value.ChannelId,
+                DiscordChannelType.PipelineSuccesses => discordSettings.Value.PipelineSuccessesChannelId ?? discordSettings.Value.ChannelId,
+                DiscordChannelType.PipelineFailures => discordSettings.Value.PipelineFailuresChannelId ?? discordSettings.Value.ChannelId,
+                _ => discordSettings.Value.ChannelId
+            };
             if (discordClient.GetChannel(channelId) is not ISocketMessageChannel channel)
                 throw new InvalidOperationException($"Failed to retrieve channel {channelId}");
             return channel;
@@ -79,7 +87,7 @@ namespace Talos.Domain.Services
                         .WithButton(ignoreButton)])
                 .Build();
 
-            var channel = await GetChannelAsync();
+            var channel = await GetChannelAsync(DiscordChannelType.ImageUpdates);
             RestUserMessage message;
             using (tracer.StartSpan(nameof(ISocketMessageChannel.SendMessageAsync), SpanKind.Client))
                 message = await channel.SendMessageAsync(embed: embed, components: component);
@@ -241,7 +249,7 @@ namespace Talos.Domain.Services
         {
             var embed = PrepareImageUpdateEmbed(push)
                 .Build();
-            await (await GetChannelAsync()).SendMessageAsync(embed: embed);
+            await (await GetChannelAsync(DiscordChannelType.ImageUpdates)).SendMessageAsync(embed: embed);
         }
 
         public async Task Notify(PipelineCompletionEvent pipelineCompleted)
@@ -268,7 +276,13 @@ namespace Talos.Domain.Services
             using var span = tracer.StartSpan(nameof(Notify), SpanKind.Client);
             try
             {
-                await (await GetChannelAsync()).SendMessageAsync(embed: embed);
+                var channelType = pipelineCompleted.Status switch
+                {
+                    PipelineStatus.Success => DiscordChannelType.PipelineSuccesses,
+                    PipelineStatus.Failed => DiscordChannelType.PipelineFailures,
+                    _ => DiscordChannelType.Default
+                };
+                await (await GetChannelAsync(channelType)).SendMessageAsync(embed: embed);
             }
             catch (Exception ex)
             {
